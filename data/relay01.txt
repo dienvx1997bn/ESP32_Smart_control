@@ -1,0 +1,1 @@
+{ "pin": 33, "name": "Relay1", "timeStart": 1568125393, "timeEnd": 1568125500, "mode": "ON" }
