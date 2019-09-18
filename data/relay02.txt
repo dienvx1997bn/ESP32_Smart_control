@@ -1,1 +1,0 @@
-{ "pin": 26, "name": "Quat tran", "timeStart": 1568125600, "timeEnd": 1568125700, "mode": "OF" }

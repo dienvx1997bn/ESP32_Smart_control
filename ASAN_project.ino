@@ -94,8 +94,8 @@ void callback(char* topic, byte *payload, unsigned int length) {
 }
 
 
-void setupPinMode() {
-    for (int i = 0; i < MAX_RELAY; i++) {
+void setup_PinMode() {
+    for (byte i = 0; i < MAX_RELAY; i++) {
         pinMode(relayPin[i], OUTPUT);
         /* digitalWrite(relayPin[i], LOW);
          delay(200);*/
@@ -113,12 +113,12 @@ void setup() {
     }
 
     listDir(SPIFFS, "/", 0);
-    readFile(SPIFFS, "/relay01.txt");
-    Serial.println();
-    readFile(SPIFFS, "/units.txt");
+    readRelayConfig(SPIFFS);
+    //Serial.println();
+    //readFile(SPIFFS, "/units.txt");
 
     Serial.setTimeout(500);// Set time out for 
-    setupPinMode();
+    setup_PinMode();
     setup_wifi();
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
@@ -275,9 +275,7 @@ void handleEvent(byte * payload)
         }
 
         if (root["type"] == "Timmer") {
-
             //Serial.print("Timmer action");
-
             byte id = root["id"];
             timmer[id].relayID = root["relayID"];
             timmer[id].relayConditionNumber = root["relayConditionNumber"];
@@ -293,9 +291,9 @@ void handleEvent(byte * payload)
 
 /*
 { "type": "Timmer", "id": 0, "relayID": 0, "relayConditionNumber": 1, "timmerStart": 0, "timmerEnd": 0, "timmerCycle": 100, "timmerInfluence": 0 }
-{ "type": "Timmer", "id": 1, "relayID": 1, "relayConditionNumber": 1, "timmerStart": 1568678553, "timmerEnd": 1568678588, "timmerCycle": 100, "timmerInfluence": 0 }
-{ "type": "Timmer", "id": 2, "relayID": 2, "relayConditionNumber": 1, "timmerStart": 1568678957, "timmerEnd": 1568678997, "timmerCycle": 100, "timmerInfluence": 0 }
-{ "type": "Timmer", "id": 3, "relayID": 2, "relayConditionNumber": 2, "timmerStart": 1568678967, "timmerEnd": 1568678987, "timmerCycle": 100, "timmerInfluence": 0 }
+{ "type": "Timmer", "id": 1, "relayID": 1, "relayConditionNumber": 1, "timmerStart": 1568759150, "timmerEnd": 1568759160, "timmerCycle": 30, "timmerInfluence": 0 }
+{ "type": "Timmer", "id": 2, "relayID": 2, "relayConditionNumber": 1, "timmerStart": 1568759290, "timmerEnd": 1568759350, "timmerCycle": 0, "timmerInfluence": 0 }
+{ "type": "Timmer", "id": 3, "relayID": 2, "relayConditionNumber": 2, "timmerStart": 1568759300, "timmerEnd": 1568759330, "timmerCycle": 0, "timmerInfluence": 0 }
 
 
 */

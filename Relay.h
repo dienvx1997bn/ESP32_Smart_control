@@ -15,6 +15,7 @@ const int relayPin[4] = { 33, 25, 26, 27 };
 class Relay
 {
 public:
+    byte pinIO;
     String name;
     byte listCondition[MAX_CONDITION];
     byte numCondition = 0;

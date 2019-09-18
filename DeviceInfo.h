@@ -4,12 +4,12 @@
 const char* ssid = "abcd_wifi";
 const char* password = "wifitang2";
 const char* mqtt_server = "soldier.cloudmqtt.com";
-#define mqtt_port 15258
+const int mqtt_port = 15258;
 
 String device_id = "Device001";
 char mqtt_clientID[] = "Device001";
 char mqtt_topic_pub[] = "reponse/Device001";
 char mqtt_topic_config[] = "config/Device001";
-char mqtt_topic_sub[] = "control/Device001";
+char mqtt_topic_sub[] = "cmd/Device001";
 char mqtt_user[] = "jhqlhwjr";
 char mqtt_pwd[] = "26Yvz_31t907";
