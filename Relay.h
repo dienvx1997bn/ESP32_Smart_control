@@ -10,8 +10,6 @@
 #define RELAY_OFF   1
 
 
-const int relayPin[4] = { 33, 25, 26, 27 };
-
 class Relay
 {
 public:

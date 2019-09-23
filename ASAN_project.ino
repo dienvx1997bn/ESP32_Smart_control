@@ -7,12 +7,12 @@
 
 #include "FileIO.h"
 #include "RTCTime.h"
-#include "DeviceInfo.h"
+#include "Config.h"
 #include "Relay.h"
 #include "AnalogINPUT.h"
 #include "DigitalInput.h"
 #include "Timmer.h"
-
+#include "Sensor.h"
 
 
 #define DEBUG
@@ -31,6 +31,8 @@ AnalogINPUT analogInput[MAX_ANALOG];
 DigitalInput digitalInput[MAX_DIGITAL];
 
 
+
+
 void relayProcessing();
 void TimmerHandler();
 void digitalHandler();
@@ -45,7 +47,7 @@ void setup_wifi() {
     Serial.println();
     Serial.print("Connecting to ");
     Serial.println(ssid);
-    WiFi.begin(ssid, password);
+    WiFi.begin(ssid.c_str(), password.c_str());
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
@@ -63,12 +65,12 @@ void reconnect() {
         Serial.print("Attempting MQTT connection...");
 
         // Attempt to connect
-        if (client.connect(mqtt_clientID, mqtt_user, mqtt_pwd)) {
+        if (client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str())) {
             Serial.println("connected");
             //Once connected, publish an announcement...
             //client.publish(mqtt_topic_pub, "hello world");
             // ... and resubscribe
-            client.subscribe(mqtt_topic_sub, 0);
+            client.subscribe(mqtt_topic_sub.c_str(), 0);
         }
         else {
             Serial.print("failed, rc=");
@@ -96,10 +98,10 @@ void callback(char* topic, byte *payload, unsigned int length) {
 
 void setup_PinMode() {
     for (byte i = 0; i < MAX_RELAY; i++) {
-        pinMode(relayPin[i], OUTPUT);
+        pinMode(relay[i].pinIO, OUTPUT);
         /* digitalWrite(relayPin[i], LOW);
          delay(200);*/
-        digitalWrite(relayPin[i], HIGH);
+        digitalWrite(relay[i].pinIO, HIGH);
     }
 }
 
@@ -113,18 +115,24 @@ void setup() {
     }
 
     listDir(SPIFFS, "/", 0);
+    readWifiConfig(SPIFFS);
+    delay(10);
+    readDeviceInfor(SPIFFS);
+    delay(10);
     readRelayConfig(SPIFFS);
+    delay(10);
+    readAnalogConfig(SPIFFS);
+    delay(10);
     //Serial.println();
     //readFile(SPIFFS, "/units.txt");
 
     Serial.setTimeout(500);// Set time out for 
     setup_PinMode();
     setup_wifi();
-    client.setServer(mqtt_server, mqtt_port);
+    client.setServer(mqtt_server.c_str(), mqtt_port);
     client.setCallback(callback);
 
     setupRTC();
-
 
     xTaskCreatePinnedToCore(
         Task1code,   /* Task function. */
@@ -171,7 +179,6 @@ void Task1code(void * pvParameters) {
 
         /*Serial.print("Task1 running on core ");
         Serial.println(xPortGetCoreID());*/
-
     }
 }
 
@@ -181,6 +188,8 @@ void Task2code(void * pvParameters) {
     Serial.println(xPortGetCoreID());*/
 
     for (;;) {
+        readSensorSHT(5000);
+
         TimmerHandler();
         digitalHandler();
         analogHandler();
@@ -207,7 +216,7 @@ void relayProcessing()
             //Serial.println("relay numCondition");
             //Serial.println(relay[i].numCondition);
 
-            for (j = 0; j < relay[i].numCondition ; j++) {
+            for (j = 0; j < relay[i].numCondition; j++) {
                 sum += relay[i].listCondition[j];
             }
             if (sum == 0) {
@@ -217,7 +226,7 @@ void relayProcessing()
                 relay[i].action = RELAY_OFF;
             }
 
-            relay[i].setRelay(relayPin[i], relay[i].action);
+            relay[i].setRelay(relay[i].pinIO, relay[i].action);
         }
 
     }
@@ -254,38 +263,79 @@ void TimmerHandler()
     }
 }
 
-void digitalHandler()
+
+void analogHandler()
 {
+    byte i;
+    int id, relayConditionNumber, analogInfluence;
+
+    for (i = 0; i < MAX_ANALOG; i++) {
+        if (analogInput[i].relayID != -1) {
+            id = analogInput[i].relayID;
+            relayConditionNumber = analogInput[i].relayConditionNumber;
+            analogInfluence = analogInput[i].analogInfluence;
+
+            relay[id].numCondition = relayConditionNumber;
+            relayConditionNumber--;
+
+            if (analogInput[i].value > analogInput[i].upper) {
+                relay[id].listCondition[relayConditionNumber] = !analogInfluence;
+            }
+            else if (analogInput[i].value < analogInput[i].lower) {
+                relay[id].listCondition[relayConditionNumber] = analogInfluence;
+            }
+        }
+    }
 
 }
 
-void analogHandler()
+void digitalHandler()
 {
 
 }
 
 void handleEvent(byte * payload)
 {
-    {
-        DynamicJsonBuffer jsonBuffer;
-        JsonObject& root = jsonBuffer.parseObject((char *)payload);
-        if (!root.success()) {
-            Serial.println("JSON parse failed");
-            return;
-        }
+    String fileName = "";
+    byte id;
 
-        if (root["type"] == "Timmer") {
-            //Serial.print("Timmer action");
-            byte id = root["id"];
-            timmer[id].relayID = root["relayID"];
-            timmer[id].relayConditionNumber = root["relayConditionNumber"];
-            timmer[id].timmerStart = root["timmerStart"];
-            timmer[id].timmerEnd = root["timmerEnd"];
-            timmer[id].timmerCycle = root["timmerCycle"];
-            timmer[id].timmerInfluence = root["timmerInfluence"];
-        }
+    StaticJsonBuffer<500> jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject((char *)payload);
+    if (!root.success()) {
+        Serial.println("JSON parse failed");
+        return;
+    }
+
+    if (root["type"] == "Timmer") {
+        //Serial.print("Timmer action");
+        id = root["id"];
+        timmer[id].relayID = root["relayID"];
+        timmer[id].relayConditionNumber = root["relayConditionNumber"];
+        timmer[id].timmerStart = root["timmerStart"];
+        timmer[id].timmerEnd = root["timmerEnd"];
+        timmer[id].timmerCycle = root["timmerCycle"];
+        timmer[id].timmerInfluence = root["timmerInfluence"];
+
+        fileName = "/timmer";
+        
 
     }
+    else if (root["type"] == "Analog") {
+        id = root["id"];
+        analogInput[id].relayID = root["relayID"];
+        analogInput[id].relayConditionNumber = root["relayConditionNumber"];
+        analogInput[id].name = root["name"].asString();
+        analogInput[id].upper = root["upper"];
+        analogInput[id].lower = root["lower"];
+        analogInput[id].gain = root["gain"];
+        analogInput[id].analogInfluence = root["analogInfluence"];
+
+        fileName = "/analog";
+    }
+
+    fileName += id;
+    fileName += ".txt";
+    writeFile(SPIFFS, fileName.c_str(), (char *)payload);
 }
 
 

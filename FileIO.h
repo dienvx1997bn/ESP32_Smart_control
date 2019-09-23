@@ -1,10 +1,16 @@
 #pragma once
 #include "SPIFFS.h"
 #include "Relay.h"
+#include "AnalogINPUT.h"
 #include "ArduinoJson.h"
+#include "Config.h"
 
 char fileData[512];
 int counter = 0;
+extern Relay relay[MAX_RELAY];
+extern AnalogINPUT analogInput[MAX_ANALOG];
+
+
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
     Serial.printf("Listing directory: %s\r\n", dirname);
@@ -39,18 +45,18 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
 }
 
 void readFile(fs::FS &fs, const char * path) {
-    Serial.printf("Reading file: %s\r\n", path);
-
+    //Serial.printf("Reading file: %s\r\n", path);
+    counter = 0;
     File file = fs.open(path);
     if (!file || file.isDirectory()) {
-        Serial.println("- failed to open file for reading");
+        //Serial.println("- failed to open file for reading");
         return;
     }
 
-    Serial.println("- read from file:");
+    //Serial.println("- read from file:");
     while (file.available()) {
-        Serial.write(file.read());
-        fileData[counter] = file.read();
+        char data = file.read();
+        fileData[counter] = data;
         counter++;
     }
 }
@@ -81,17 +87,62 @@ void deleteFile(fs::FS &fs, const char * path) {
     }
 }
 
+int readDeviceInfor(fs::FS &fs) {
+    String relayFileName = "/deviceinfor.txt";
+    memset(fileData, 0, 512);
+    readFile(fs, relayFileName.c_str());
+
+    String data = String(fileData);
+    //Serial.println(data);
+
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(data);
+    if (!root.success()) {
+        Serial.println("deviceinfor Not success!");
+        return -1;
+    }
+
+    device_id = root["device_id"].asString();
+    mqtt_topic_pub += device_id;
+    mqtt_topic_config += device_id;
+    mqtt_topic_sub += device_id;
+    mqtt_user = root["mqtt_user"].asString();
+    mqtt_pwd = root["mqtt_pwd"].asString();
+}
+
+int readWifiConfig(fs::FS &fs) {
+    String relayFileName = "/wifiConfig.txt";
+    memset(fileData, 0, 512);
+    readFile(fs, relayFileName.c_str());
+
+    String data = String(fileData);
+
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(data);
+    if (!root.success()) {
+        Serial.println("wifiConfig Not success!");
+        return -1;
+    }
+
+    ssid = root["ssid"].asString();
+    password = root["password"].asString();
+    mqtt_server = root["mqtt_server"].asString();
+    mqtt_port = root["mqtt_port"];
+}
+
 int readRelayConfig(fs::FS &fs) {
     String relayFileName = "/relay";
     for (byte i = 0; i < MAX_RELAY; i++) {
+        memset(fileData, 0, 512);
         relayFileName += i;
         relayFileName += ".txt";
         readFile(fs, relayFileName.c_str());
-
+        //Serial.println(fileData);
         // update data relay
         DynamicJsonBuffer jsonBuffer;
         JsonObject& root = jsonBuffer.parseObject(fileData);
         if (!root.success()) {
+            Serial.println("relay Not success!");
             return -1;
         }
 
@@ -107,3 +158,38 @@ int readRelayConfig(fs::FS &fs) {
         relayFileName = "/relay";
     }
 }
+
+int readAnalogConfig(fs::FS &fs) {
+    String relayFileName = "/analog";
+    for (byte i = 0; i < MAX_ANALOG; i++) {
+        memset(fileData, 0, 512);
+        relayFileName += i;
+        relayFileName += ".txt";
+        readFile(fs, relayFileName.c_str());
+        //Serial.println(fileData);
+        // update data relay
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject& root = jsonBuffer.parseObject(fileData);
+        if (!root.success()) {
+            Serial.println("analog Not success!");
+            return -1;
+        }
+
+        analogInput[i].relayID = root["relayID"];
+        analogInput[i].id = root["id"];
+        analogInput[i].name = root["name"].asString();
+        analogInput[i].relayConditionNumber = root["relayConditionNumber"];
+        
+        analogInput[i].upper = root["upper"];
+        analogInput[i].lower = root["lower"];
+        analogInput[i].gain = root["gain"];
+
+        analogInput[i].analogInfluence = root["analogInfluence"];
+
+        counter = 0;
+        relayFileName = "/analog";
+        //Serial.println(analogInput[i].name);
+    }
+}
+
+

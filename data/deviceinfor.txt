@@ -1,16 +1,1 @@
-{
-  "WifiConfig": {
-    "ssid": "abcd_wifi",
-    "password": "wifitang2",
-    "mqtt_server": "soldier.cloudmqtt.com",
-    "mqtt_port": 15258
-  },
-  "DeviceInfor": {
-    "device_id": "Device001",
-    "mqtt_topic_pub": "reponse/Device001",
-    "mqtt_topic_config": "config/Device001",
-    "mqtt_topic_sub": "cmd/Device001",
-    "mqtt_user": "jhqlhwjr",
-    "mqtt_pwd": "26Yvz_31t907"
-  }
-}
+{ "device_id": "Device001", "mqtt_user": "jhqlhwjr", "mqtt_pwd": "26Yvz_31t907" }

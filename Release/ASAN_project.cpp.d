@@ -256,10 +256,12 @@ C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\ASAN
  C:\Users\dienv\AppData\Local\arduino15\packages\esp32\hardware\esp32\1.0.2\libraries\SPIFFS\src/SPIFFS.h \
  C:\Users\dienv\AppData\Local\arduino15\packages\esp32\hardware\esp32\1.0.2\libraries\FS\src/FS.h \
  C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\Relay.h \
+ C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\AnalogINPUT.h \
+ C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\Config.h \
  C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\RTCTime.h \
  C:\Users\dienv\Documents\Arduino\libraries\Time-master/TimeLib.h \
  C:\Users\dienv\AppData\Local\arduino15\packages\esp32\hardware\esp32\1.0.2\libraries\WiFi\src/WiFiUdp.h \
- C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\DeviceInfo.h \
- C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\AnalogINPUT.h \
  C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\DigitalInput.h \
- C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\Timmer.h
+ C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\Timmer.h \
+ C:\Users\dienv\AppData\Local\Temp\VMBuilds\ASAN_project\esp32_esp32\Release\Sensor.h \
+ C:\Users\dienv\Documents\Arduino\libraries\SHT1x-master/SHT1x.h
