@@ -44,13 +44,13 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
     }
 }
 
-void readFile(fs::FS &fs, const char * path) {
+int readFile(fs::FS &fs, const char * path) {
     //Serial.printf("Reading file: %s\r\n", path);
     counter = 0;
     File file = fs.open(path);
     if (!file || file.isDirectory()) {
         //Serial.println("- failed to open file for reading");
-        return;
+        return 0;
     }
 
     //Serial.println("- read from file:");
@@ -59,6 +59,7 @@ void readFile(fs::FS &fs, const char * path) {
         fileData[counter] = data;
         counter++;
     }
+    return 1;
 }
 
 void writeFile(fs::FS &fs, const char * path, const char * message) {
@@ -136,14 +137,16 @@ int readRelayConfig(fs::FS &fs) {
         memset(fileData, 0, 512);
         relayFileName += i;
         relayFileName += ".txt";
-        readFile(fs, relayFileName.c_str());
+        if (!readFile(fs, relayFileName.c_str())) {
+            continue;
+        }
         //Serial.println(fileData);
         // update data relay
         DynamicJsonBuffer jsonBuffer;
         JsonObject& root = jsonBuffer.parseObject(fileData);
         if (!root.success()) {
             Serial.println("relay Not success!");
-            return -1;
+            continue;
         }
 
         relay[i].pinIO = root["pinIO"];
@@ -165,14 +168,16 @@ int readAnalogConfig(fs::FS &fs) {
         memset(fileData, 0, 512);
         relayFileName += i;
         relayFileName += ".txt";
-        readFile(fs, relayFileName.c_str());
+        if (!readFile(fs, relayFileName.c_str())) {
+            continue;
+        }        
         //Serial.println(fileData);
         // update data relay
         DynamicJsonBuffer jsonBuffer;
         JsonObject& root = jsonBuffer.parseObject(fileData);
         if (!root.success()) {
             Serial.println("analog Not success!");
-            return -1;
+            continue;
         }
 
         analogInput[i].relayID = root["relayID"];

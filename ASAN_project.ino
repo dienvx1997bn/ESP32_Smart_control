@@ -299,43 +299,50 @@ void handleEvent(byte * payload)
     String fileName = "";
     byte id;
 
-    StaticJsonBuffer<500> jsonBuffer;
+    DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject((char *)payload);
     if (!root.success()) {
         Serial.println("JSON parse failed");
         return;
     }
 
-    if (root["type"] == "Timmer") {
-        //Serial.print("Timmer action");
-        id = root["id"];
-        timmer[id].relayID = root["relayID"];
-        timmer[id].relayConditionNumber = root["relayConditionNumber"];
-        timmer[id].timmerStart = root["timmerStart"];
-        timmer[id].timmerEnd = root["timmerEnd"];
-        timmer[id].timmerCycle = root["timmerCycle"];
-        timmer[id].timmerInfluence = root["timmerInfluence"];
-
-        fileName = "/timmer";
-        
-
+    if (root["type"] == "remove") {
+        String fileName = root["file"];
+        fileName += ".txt";
+        deleteFile(SPIFFS, fileName.c_str());
     }
-    else if (root["type"] == "Analog") {
-        id = root["id"];
-        analogInput[id].relayID = root["relayID"];
-        analogInput[id].relayConditionNumber = root["relayConditionNumber"];
-        analogInput[id].name = root["name"].asString();
-        analogInput[id].upper = root["upper"];
-        analogInput[id].lower = root["lower"];
-        analogInput[id].gain = root["gain"];
-        analogInput[id].analogInfluence = root["analogInfluence"];
+    else {
+        if (root["type"] == "Timmer") {
+            //Serial.print("Timmer action");
+            id = root["id"];
+            timmer[id].relayID = root["relayID"];
+            timmer[id].relayConditionNumber = root["relayConditionNumber"];
+            timmer[id].timmerStart = root["timmerStart"];
+            timmer[id].timmerEnd = root["timmerEnd"];
+            timmer[id].timmerCycle = root["timmerCycle"];
+            timmer[id].timmerInfluence = root["timmerInfluence"];
 
-        fileName = "/analog";
+            fileName = "/timmer";
+
+
+        }
+        else if (root["type"] == "Analog") {
+            id = root["id"];
+            analogInput[id].relayID = root["relayID"];
+            analogInput[id].relayConditionNumber = root["relayConditionNumber"];
+            analogInput[id].name = root["name"].asString();
+            analogInput[id].upper = root["upper"];
+            analogInput[id].lower = root["lower"];
+            analogInput[id].gain = root["gain"];
+            analogInput[id].analogInfluence = root["analogInfluence"];
+
+            fileName = "/analog";
+        }
+
+        fileName += id;
+        fileName += ".txt";
+        writeFile(SPIFFS, fileName.c_str(), (char *)payload);
     }
-
-    fileName += id;
-    fileName += ".txt";
-    writeFile(SPIFFS, fileName.c_str(), (char *)payload);
 }
 
 
