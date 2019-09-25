@@ -109,6 +109,8 @@ int readDeviceInfor(fs::FS &fs) {
     mqtt_topic_sub += device_id;
     mqtt_user = root["mqtt_user"].asString();
     mqtt_pwd = root["mqtt_pwd"].asString();
+
+    host += device_id;
 }
 
 int readWifiConfig(fs::FS &fs) {
@@ -129,6 +131,8 @@ int readWifiConfig(fs::FS &fs) {
     password = root["password"].asString();
     mqtt_server = root["mqtt_server"].asString();
     mqtt_port = root["mqtt_port"];
+
+
 }
 
 int readRelayConfig(fs::FS &fs) {

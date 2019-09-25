@@ -107,9 +107,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AnalogINPUT.h" />
-    <ClInclude Include="DeviceInfo.h">
-      <FileType>CppCode</FileType>
-    </ClInclude>
+    <ClInclude Include="Config.h" />
     <ClInclude Include="FileIO.h" />
     <ClInclude Include="DigitalInput.h" />
     <ClInclude Include="Relay.h">

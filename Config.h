@@ -12,3 +12,6 @@ String mqtt_topic_sub = "cmd/";
 String mqtt_user = "";
 String mqtt_pwd = "";
 
+String host = "esp32";
+
+
