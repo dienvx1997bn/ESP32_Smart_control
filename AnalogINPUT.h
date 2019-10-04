@@ -7,8 +7,8 @@
 class AnalogINPUT
 {
 public:
-    int relayID = -1;
-    byte relayConditionNumber;  // Điều kiện thứ i của relay.listCondigion
+    int relayID[MAX_RELAY];
+    byte relayConditionNumber[MAX_RELAY];  // Điều kiện thứ i của relay.listCondigion
 
     byte id;
     String name;

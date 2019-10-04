@@ -1,5 +1,5 @@
 #pragma once
-#include "SPIFFS.h"
+#include <SPIFFS.h>
 #include "Relay.h"
 #include "AnalogINPUT.h"
 #include "ArduinoJson.h"
@@ -184,10 +184,11 @@ int readAnalogConfig(fs::FS &fs) {
             continue;
         }
 
-        analogInput[i].relayID = root["relayID"];
+        byte relayID = root["relayID"];
+        analogInput[i].relayID[relayID] = relayID;
         analogInput[i].id = root["id"];
         analogInput[i].name = root["name"].asString();
-        analogInput[i].relayConditionNumber = root["relayConditionNumber"];
+        analogInput[i].relayConditionNumber[relayID] = root["relayConditionNumber"];
         
         analogInput[i].upper = root["upper"];
         analogInput[i].lower = root["lower"];
