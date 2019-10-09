@@ -3,15 +3,17 @@
 #include <FS.h>
 #include <SPIFFS.h>
 #include <WiFi.h>
-#include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include "RTClib.h"
 
-//#include <WiFiClient.h>
-//#include <WebServer.h>
-//#include <ESPmDNS.h>
-//#include <Update.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
+#include <Update.h>
+#include <MQTT.h>
+#include <DNSServer.h>
+#include <WiFiManager.h>
 
 #include "WebOTA.h"
 #include "FileIO.h"
@@ -23,15 +25,17 @@
 #include "Timmer.h"
 #include "Sensor.h"
 
+
 #define DEBUG
+
 // Mutil task
 TaskHandle_t Task1;
 TaskHandle_t Task2;
 
 WiFiClient wifiClient;
-PubSubClient client(wifiClient);
+MQTTClient client;
 
-//WebServer server(80);
+WebServer server(80);
 
 
 DateTime dateTime;
@@ -48,16 +52,14 @@ void digitalHandler();
 void analogHandler();
 
 void handleEvent(byte *payload);
-
+//
 //void OTA_update() {
+//    //host += ".local";
 //    /*use mdns for host name resolution*/
-//    if (!MDNS.begin(host.c_str())) { //http://esp32Device001.local
+//    if (!MDNS.begin("http://esp32.local")) { //http://esp32.local
 //        Serial.println("Error setting up MDNS responder!");
-//        while (1) {
-//            delay(1000);
-//        }
 //    }
-//    Serial.println("mDNS responder started");
+//    else Serial.println("mDNS responder started");
 //
 //    /*return index page which is stored in serverIndex */
 //    server.on("/", HTTP_GET, []() {
@@ -99,67 +101,56 @@ void handleEvent(byte *payload);
 //    server.begin();
 //}
 
-int setup_wifi() {
-    unsigned long previousMillis = 0;  // will store last time LED was updated
-    const long interval = 30000;  // interval at which to blink (milliseconds)
-    previousMillis = millis();
+//int setup_wifi() {
+//    unsigned long previousMillis = 0;  // will store last time LED was updated
+//    const long interval = 30000;  // interval at which to blink (milliseconds)
+//    previousMillis = millis();
+//
+//    delay(10);
+//    // We start by connecting to a WiFi network
+//    Serial.println();
+//    Serial.print("Connecting to ");
+//    Serial.println(ssid);
+//    WiFi.begin(ssid.c_str(), password.c_str());
+//    while (WiFi.status() != WL_CONNECTED) {
+//        if (millis() - previousMillis >= interval) {
+//            return 0;
+//        }
+//
+//        delay(500);
+//        Serial.print(".");
+//    }
+//    randomSeed(micros());
+//    Serial.println("");
+//    Serial.println("WiFi connected");
+//    Serial.println("IP address: ");
+//    Serial.println(WiFi.localIP());
+//
+//    return -1;
+//}
 
-    delay(10);
-    // We start by connecting to a WiFi network
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    WiFi.begin(ssid.c_str(), password.c_str());
+void connect() {
+    Serial.print("connecting to wifi...");
     while (WiFi.status() != WL_CONNECTED) {
-        if (millis() - previousMillis >= interval) {
-            return 0;
-        }
-
-        delay(500);
         Serial.print(".");
+        delay(1000);
     }
-    randomSeed(micros());
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
 
-    return -1;
+    Serial.print("\nconnecting...");
+    while (!client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str())) {
+        Serial.print(".");
+        delay(1000);
+    }
+
+    Serial.println("\nconnected!");
+
+    client.subscribe(mqtt_topic_sub.c_str());
+    // client.unsubscribe("/hello");
 }
 
-void reconnect() {
-    // Loop until we're reconnected
-    while (!client.connected()) {
-        Serial.print("Attempting MQTT connection...");
-
-        // Attempt to connect
-        if (client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str())) {
-            Serial.println("connected");
-            //Once connected, publish an announcement...
-            //client.publish(mqtt_topic_pub, "hello world");
-            // ... and resubscribe
-            client.subscribe(mqtt_topic_sub.c_str(), 0);
-        }
-        else {
-            Serial.print("failed, rc=");
-            Serial.print(client.state());
-            Serial.println(" try again in 5 seconds");
-            // Wait 5 seconds before retrying
-            delay(5000);
-        }
-    }
-}
-
-
-void callback(char* topic, byte *payload, unsigned int length) {
-    //print recevied messages on the serial console
-    //Serial.println("-------new message from broker-----");
-    //Serial.print("channel:");
-    //Serial.println(topic);
-    //Serial.print("data:");
-    //Serial.write(payload, length);
-    //Serial.println();
-
+void messageReceived(String &topic, String &payload) {
+    //Serial.println("incoming: " + topic + " - " + payload);
+    //payload[length] = 0;
     handleEvent(payload);
 }
 
@@ -191,19 +182,23 @@ void setup() {
     delay(10);
     readAnalogConfig(SPIFFS);
     delay(10);
-    //Serial.println();
-    //readFile(SPIFFS, "/units.txt");
 
-    Serial.setTimeout(500);// Set time out for 
+    Serial.setTimeout(500);
     
     setup_PinMode();
     
-    setup_wifi();
-    //OTA_update();
+      ////wifimanager here
+    WiFiManager wifiManager;
+    wifiManager.autoConnect();
 
-    client.setServer(mqtt_server.c_str(), mqtt_port);
-    client.setCallback(callback);
+    //MQTT connect
 
+    client.begin(mqtt_server.c_str(), mqtt_port, wifiClient);
+    client.onMessage(messageReceived);
+
+    connect();
+
+    //RTC setup
     setupRTC();
 
     xTaskCreatePinnedToCore(
@@ -237,7 +232,7 @@ void Task1code(void * pvParameters) {
         dateTime = getRTC().now();
         timeNow = dateTime.unixtime();
         unsigned long currentMillis = millis();
-        if (currentMillis - previousMillis >= 1000) {
+        if (currentMillis - previousMillis >= 2000) {
             previousMillis = currentMillis;
             updateRTC();
             Serial.println(timeNow);
@@ -245,9 +240,10 @@ void Task1code(void * pvParameters) {
 
         // mqtt
         if (!client.connected()) {
-            reconnect();
+            connect();
         }
         client.loop();
+
 
         /*Serial.print("Task1 running on core ");
         Serial.println(xPortGetCoreID());*/
@@ -371,16 +367,21 @@ void digitalHandler()
 
 }
 
-void handleEvent(byte * payload)
+void handleEvent(String & payload)
 {
+    Serial.println(payload);
+
     String fileName = "";
     byte id;
-
+    
     DynamicJsonBuffer jsonBuffer;
-    JsonObject& root = jsonBuffer.parseObject((char *)payload);
+    JsonObject& root = jsonBuffer.parseObject(payload);
     if (!root.success()) {
         Serial.println("JSON parse failed");
         return;
+    }
+    else {
+        Serial.println("JSON parse OK!");
     }
 
     if (root["type"] == "remove") {
@@ -389,37 +390,36 @@ void handleEvent(byte * payload)
         deleteFile(SPIFFS, fileName.c_str());
     }
     else {
+        //{ "type": "Timmer", "id" : 0, "relayID" : 0, "rcn" : 1, "ts" : 0, "te" : 0, "tc" : 100, "ti" : 0 }
         if (root["type"] == "Timmer") {
             //Serial.print("Timmer action");
             id = root["id"];
             timmer[id].relayID = root["relayID"];
-            timmer[id].relayConditionNumber = root["relayConditionNumber"];
-            timmer[id].timmerStart = root["timmerStart"];
-            timmer[id].timmerEnd = root["timmerEnd"];
-            timmer[id].timmerCycle = root["timmerCycle"];
-            timmer[id].timmerInfluence = root["timmerInfluence"];
+            timmer[id].relayConditionNumber = root["rcn"];
+            timmer[id].timmerStart = root["ts"];
+            timmer[id].timmerEnd = root["te"];
+            timmer[id].timmerCycle = root["tc"];
+            timmer[id].timmerInfluence = root["ti"];
 
             fileName = "/timmer";
-
-
         }
         else if (root["type"] == "Analog") {
             id = root["id"];
             byte relayid = (byte)root["relayID"];
             analogInput[id].relayID[relayid] = relayid;
-            analogInput[id].relayConditionNumber[relayid] = root["relayConditionNumber"];
+            analogInput[id].relayConditionNumber[relayid] = root["rcn"];
             analogInput[id].name = root["name"].asString();
-            analogInput[id].upper = root["upper"];
-            analogInput[id].lower = root["lower"];
-            analogInput[id].gain = root["gain"];
-            analogInput[id].analogInfluence = root["analogInfluence"];
+            analogInput[id].upper = root["u"];
+            analogInput[id].lower = root["l"];
+            analogInput[id].gain = root["g"];
+            analogInput[id].analogInfluence = root["ai"];
 
             fileName = "/analog";
         }
 
         fileName += id;
         fileName += ".txt";
-        writeFile(SPIFFS, fileName.c_str(), (char *)payload);
+        writeFile(SPIFFS, fileName.c_str(), payload.c_str());
     }
 }
 
@@ -430,5 +430,7 @@ void handleEvent(byte * payload)
 { "type": "Timmer", "id": 2, "relayID": 2, "relayConditionNumber": 1, "timmerStart": 1568759290, "timmerEnd": 1568759350, "timmerCycle": 0, "timmerInfluence": 0 }
 { "type": "Timmer", "id": 3, "relayID": 2, "relayConditionNumber": 2, "timmerStart": 1568759300, "timmerEnd": 1568759330, "timmerCycle": 0, "timmerInfluence": 0 }
 
+
+{ "type": "Timmer", "id": 0, "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
 
 */

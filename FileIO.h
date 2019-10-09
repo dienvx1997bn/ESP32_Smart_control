@@ -110,7 +110,6 @@ int readDeviceInfor(fs::FS &fs) {
     mqtt_user = root["mqtt_user"].asString();
     mqtt_pwd = root["mqtt_pwd"].asString();
 
-    host += device_id;
 }
 
 int readWifiConfig(fs::FS &fs) {
