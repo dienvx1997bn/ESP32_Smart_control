@@ -1,0 +1,1 @@
+{ "relayID": -1, "relayConditionNumber": 0, "name": "Do am", "id": 1, "value": 0, "upper": 0, "lower": 0, "gain": 1, "analogInfluence": 0 }
