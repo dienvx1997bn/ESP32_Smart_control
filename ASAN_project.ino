@@ -313,16 +313,20 @@ void TimmerHandler()
 
     for (i = 0; i < MAX_RELAY; i++) {    // Duyệt timmer
         if (timmer[i].relayID != -1) {  // Nếu timmer đã đc gắn cho relay nào đó
-            id = (int)timmer[i].relayID;
-            relayConditionNumber = (int)timmer[i].relayConditionNumber;
-            timmerInfluence = (int)timmer[i].timmerInfluence;
+            id = timmer[i].relayID;
+            relayConditionNumber = timmer[i].relayConditionNumber;
+            timmerInfluence = timmer[i].timmerInfluence;
 
             //Serial.print("relay id:   ");
             //Serial.println(timmer[i].relayID);
             relay[id].numCondition = relayConditionNumber;
             relayConditionNumber--;
-
-            if (timmer[i].timmerEnd == 0 || (timeNow >= timmer[i].timmerStart && timeNow < timmer[i].timmerEnd)) { // Nếu là bật hoặc tắt hoặc trong thời gian hẹn giờ
+            //if (timmer[i].timmerEnd == 0 && timmer[i].timmerStart > 0) {   // hẹn giờ đếm ngược
+            //    timmer[i].timmerEnd = timmer[i].timmerStart + timmer[i].timmerCycle;;
+            //    relay[id].listCondition[relayConditionNumber] = timmerInfluence;
+            //    break;
+            //}
+            if (timmer[i].timmerStart == 0 && timmer[i].timmerEnd == 0 ) { // Nếu là bật hoặc tắt hoặc trong thời gian hẹn giờ
                 relay[id].listCondition[relayConditionNumber] = timmerInfluence;
             }
             else if (timeNow < timmer[i].timmerStart) { // Nếu chưa đến thời gian hẹn giờ thì đảo ngược trạng thái cài đặt
@@ -438,5 +442,7 @@ void handleEvent(String & payload)
 
 
 { "type": "Timmer", "id": 0, "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
+
+//ESP2646569276
 
 */
