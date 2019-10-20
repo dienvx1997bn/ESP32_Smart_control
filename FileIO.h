@@ -10,6 +10,7 @@ int counter = 0;
 extern Relay relay[MAX_RELAY];
 extern AnalogINPUT analogInput[MAX_ANALOG];
 
+#define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
 
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
@@ -103,36 +104,19 @@ int readDeviceInfor(fs::FS &fs) {
         return -1;
     }
 
-    device_id = root["device_id"].asString();
+    device_id = String(ESP_getChipId());
     mqtt_topic_pub += device_id;
     mqtt_topic_config += device_id;
     mqtt_topic_sub += device_id;
     mqtt_user = root["mqtt_user"].asString();
     mqtt_pwd = root["mqtt_pwd"].asString();
-
-}
-
-int readWifiConfig(fs::FS &fs) {
-    String relayFileName = "/wifiConfig.txt";
-    memset(fileData, 0, 512);
-    readFile(fs, relayFileName.c_str());
-
-    String data = String(fileData);
-
-    DynamicJsonBuffer jsonBuffer;
-    JsonObject& root = jsonBuffer.parseObject(data);
-    if (!root.success()) {
-        Serial.println("wifiConfig Not success!");
-        return -1;
-    }
-
     ssid = root["ssid"].asString();
     password = root["password"].asString();
     mqtt_server = root["mqtt_server"].asString();
     mqtt_port = root["mqtt_port"];
 
-
 }
+
 
 int readRelayConfig(fs::FS &fs) {
     String relayFileName = "/relay";

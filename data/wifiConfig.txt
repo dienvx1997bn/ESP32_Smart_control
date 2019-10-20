@@ -1,1 +1,0 @@
-{ "ssid": "DDD", "password": "haiauluotgio", "mqtt_server": "soldier.cloudmqtt.com", "mqtt_port": 15258 }

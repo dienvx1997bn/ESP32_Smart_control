@@ -51,7 +51,6 @@ void TimmerHandler();
 void digitalHandler();
 void analogHandler();
 
-void handleEvent(byte *payload);
 //
 //void OTA_update() {
 //    //host += ".local";
@@ -145,12 +144,18 @@ void connect() {
     Serial.println("\nconnected!");
 
     client.subscribe(mqtt_topic_sub.c_str());
+    Serial.print("topic control:  ");
+    Serial.println(mqtt_topic_sub.c_str());
     // client.unsubscribe("/hello");
 }
 
 void messageReceived(String &topic, String &payload) {
     //Serial.println("incoming: " + topic + " - " + payload);
     //payload[length] = 0;
+#ifdef DEBUG
+    Serial.println("incoming topic: " + topic);
+#endif // DEBUG
+
     handleEvent(payload);
 }
 
@@ -166,6 +171,7 @@ void setup_PinMode() {
 
 void setup() {
     Serial.begin(115200);
+    delay(100);
 
     //Doc cau hinh
     if (!SPIFFS.begin(true)) {
@@ -174,8 +180,7 @@ void setup() {
     }
 
     listDir(SPIFFS, "/", 0);
-    readWifiConfig(SPIFFS);
-    delay(10);
+
     readDeviceInfor(SPIFFS);
     delay(10);
     readRelayConfig(SPIFFS);
@@ -425,6 +430,7 @@ void handleEvent(String & payload)
 
 
 /*
+
 { "type": "Timmer", "id": 0, "relayID": 0, "relayConditionNumber": 1, "timmerStart": 0, "timmerEnd": 0, "timmerCycle": 100, "timmerInfluence": 0 }
 { "type": "Timmer", "id": 1, "relayID": 1, "relayConditionNumber": 1, "timmerStart": 1568759150, "timmerEnd": 1568759160, "timmerCycle": 30, "timmerInfluence": 0 }
 { "type": "Timmer", "id": 2, "relayID": 2, "relayConditionNumber": 1, "timmerStart": 1568759290, "timmerEnd": 1568759350, "timmerCycle": 0, "timmerInfluence": 0 }
