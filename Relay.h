@@ -17,15 +17,15 @@ public:
     String name;
     byte listCondition[MAX_CONDITION];
     byte numCondition = 0;
-    byte action;
+    byte status = RELAY_OFF;
+    byte oldStatus = RELAY_OFF;
 
 
 public:
     Relay();
     ~Relay();
 
-    void setRelay(byte pinIO, byte state);
-
+    bool setRelay(byte index, byte pinIO, byte state);  //return 1 if has change relay status, else return 0
 };
 
 

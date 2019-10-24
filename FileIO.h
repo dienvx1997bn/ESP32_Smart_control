@@ -4,10 +4,12 @@
 #include "AnalogINPUT.h"
 #include "ArduinoJson.h"
 #include "Config.h"
+#include "Timmer.h"
 
 char fileData[512];
 int counter = 0;
 extern Relay relay[MAX_RELAY];
+extern Timmer timmer[MAX_RELAY];
 extern AnalogINPUT analogInput[MAX_ANALOG];
 
 #define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
@@ -43,6 +45,16 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
         }
         file = root.openNextFile();
     }
+}
+
+String readFileString(fs::FS &fs, const char * path) {
+    String str = "";
+    File file = fs.open(path);
+    while (file.available()) {
+        char data = file.read();
+        str += data;
+    }
+    return str;
 }
 
 int readFile(fs::FS &fs, const char * path) {
@@ -105,9 +117,9 @@ int readDeviceInfor(fs::FS &fs) {
     }
 
     device_id = String(ESP_getChipId());
-    mqtt_topic_pub += device_id;
+    mqtt_topic_reponse += device_id;
     mqtt_topic_config += device_id;
-    mqtt_topic_sub += device_id;
+    mqtt_topic_control += device_id;
     mqtt_user = root["mqtt_user"].asString();
     mqtt_pwd = root["mqtt_pwd"].asString();
     ssid = root["ssid"].asString();
@@ -142,7 +154,7 @@ int readRelayConfig(fs::FS &fs) {
         for (byte j = 0; j < relay[i].numCondition; j++) {
             relay[i].listCondition[j] = root["listCondition"][j];
         }
-        relay[i].action = root["action"];
+        relay[i].status = root["action"];
 
         counter = 0;
         relayFileName = "/relay";
@@ -183,6 +195,58 @@ int readAnalogConfig(fs::FS &fs) {
         relayFileName = "/analog";
         //Serial.println(analogInput[i].name);
     }
+}
+
+//
+int readTimmerConfig(fs::FS &fs) {
+    String timmerFileName = "/timmer";
+    for (byte i = 0; i < MAX_RELAY; i++) {
+        memset(fileData, 0, 512);
+        timmerFileName += i;
+        timmerFileName += ".txt";
+        if (!readFile(fs, timmerFileName.c_str())) {
+            continue;
+        }
+        //Serial.println(fileData);
+        // update data relay
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject& root = jsonBuffer.parseObject(fileData);
+        if (!root.success()) {
+            Serial.println("timmer Not success!");
+            continue;
+        }
+
+        timmer[i].relayID = root["relayID"];
+        timmer[i].relayConditionNumber = root["rcn"];
+        timmer[i].timmerStart = root["ts"];
+        timmer[i].timmerEnd = root["te"];
+        timmer[i].timmerCycle = root["tc"];
+        timmer[i].timmerInfluence = root["ti"];
+
+        timmerFileName = "/timmer";
+    }
+}
+
+void updateRelayConfig(fs::FS &fs, byte index)
+{
+    String relayData = "";
+    String fileName = "/relay";
+    fileName += index;
+    fileName += ".txt";
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    JsonArray& listCondition = root.createNestedArray("listCondition");
+
+    root["pinIO"] = relay[index].pinIO;
+    root["name"] = relay[index].name;
+    root["numCondition"] = relay[index].numCondition;
+    for (byte j = 0; j < relay[index].numCondition; j++) {
+        listCondition.add(relay[index].listCondition[j]);
+    }
+    root["action"] = relay[index].oldStatus;
+
+    root.printTo(relayData);
+    writeFile(fs, fileName.c_str(), relayData.c_str());
 }
 
 

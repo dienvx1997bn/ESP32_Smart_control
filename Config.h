@@ -6,12 +6,17 @@ int mqtt_port;
 
 String device_id = "";
 String mqtt_clientID = "";
-String mqtt_topic_pub = "reponse/";
+String mqtt_topic_reponse = "ask/";
 String mqtt_topic_config = "config/";
-String mqtt_topic_sub = "cmd/";
+String mqtt_topic_control = "cmd/";
 String mqtt_user = "";
 String mqtt_pwd = "";
 
 String host = "esp32";
+
+
+
+
+
 
 
