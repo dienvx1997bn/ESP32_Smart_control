@@ -1,1 +1,1 @@
-{ "pinIO": 33, "name": "thiet bi 0", "listCondition": [0], "numCondition": 0, "action": "1" }
+{ "pinIO": 12, "name": "thiet bi 0", "listCondition": [0], "numCondition": 0, "action": "1" }

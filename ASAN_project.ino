@@ -44,6 +44,14 @@ WiFiClient wifiClient;
 MQTTClient client;
 
 WebServer server(80);
+/* Put your SSID & Password */
+String APssid = "ESP32";  // Enter SSID here
+const char* APpassword = "12345678";  //Enter Password here
+
+/* Put IP Address details */
+IPAddress local_ip(192, 168, 1, 1);
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 DateTime dateTime;
 long timeNow;
@@ -52,25 +60,20 @@ Timmer timmer[MAX_RELAY];
 AnalogINPUT analogInput[MAX_ANALOG];
 DigitalInput digitalInput[MAX_DIGITAL];
 
-void relayProcessing();
-void TimmerHandler();
-void digitalHandler();
-void analogHandler();
-
 
 void OTA_update() {     
     String host = "esp";
     host += String(ESP_getChipId());
-    host += ".local";
 
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
-
+    delay(1);
     /*use mdns for host name resolution*/
     if (!MDNS.begin(host.c_str())) {            //  http://esp193858948.local
         Serial.println("Error setting up MDNS responder!");
     }
     else {
+        host += "local";
         Serial.println("mDNS responder started:  " + host);
     }
 
@@ -180,7 +183,6 @@ void messageReceived(String &topic, String &payload) {
     }
 }
 
-
 void setup_PinMode() {
     for (byte i = 0; i < MAX_RELAY; i++) {
         pinMode(relay[i].pinIO, OUTPUT);
@@ -189,6 +191,7 @@ void setup_PinMode() {
         digitalWrite(relay[i].pinIO, HIGH);
     }
 }
+
 
 void setup() {
     Serial.begin(115200);
@@ -232,6 +235,7 @@ void setup() {
     setupRTC();
 
     OTA_update();
+    delay(1);
 
     xTaskCreatePinnedToCore(
         Task1code,   /* Task function. */
@@ -260,6 +264,8 @@ void Task1code(void * pvParameters) {
     static unsigned long previousMillis = 0;
 
     for (;;) {
+        //OTA
+        server.handleClient();
         //update time
         dateTime = getRTC().now();
         timeNow = dateTime.unixtime();
@@ -276,9 +282,7 @@ void Task1code(void * pvParameters) {
         }
         client.loop();
 
-        //OTA
-        server.handleClient();
-        delay(1);
+        
     }
 }
 
@@ -344,16 +348,19 @@ void TimmerHandler()
             relay[relayid].numCondition = relayConditionNumber;
             relayConditionNumber = relayConditionNumber - 1; //chỉ số thấp hơn giá trị 1 đơn vị
 
-            if (timmer[i].timmerStart == 0 && timmer[i].timmerEnd == 0) { // Nếu là bật hoặc tắt hoặc trong thời gian hẹn giờ
+            if (timmer[i].timmerStart == 0 && timmer[i].timmerEnd == 0) { // Nếu là bật hoặc tắt 
                 relay[relayid].listCondition[relayConditionNumber] = timmerInfluence;
             }
-            else if (timeNow < timmer[i].timmerStart) { // Nếu chưa đến thời gian hẹn giờ thì đảo ngược trạng thái cài đặt
+            else if (timeNow < timmer[i].timmerStart) { // Nếu chưa đến thời gian hẹn giờ hoặc hết giờ thì đảo ngược trạng thái cài đặt
                 relay[relayid].listCondition[relayConditionNumber] = !timmerInfluence;
             }
             else if (timeNow > timmer[i].timmerEnd) { // Nếu quá thời gian hẹn giờ thì đảo ngược trạng thái cài đặt, cộng thêm chu kỳ chuẩn bị cho tiếp theo
                 relay[relayid].listCondition[relayConditionNumber] = !timmerInfluence;
                 timmer[i].timmerStart += timmer[i].timmerCycle;
                 timmer[i].timmerEnd += timmer[i].timmerCycle;
+            }
+            else if(timeNow >= timmer[i].timmerStart && timeNow <= timmer[i].timmerEnd) {      //Nếu là trong thời gian hẹn giờ
+                relay[relayid].listCondition[relayConditionNumber] = timmerInfluence;
             }
         }
     }
@@ -415,6 +422,12 @@ void handleEventControl(String & payload)
         String fileName = root["file"];
         fileName += ".txt";
         deleteFile(SPIFFS, fileName.c_str());
+    }
+    else if (root["type"] == "reset") {
+        WiFi.disconnect(true);   // still not erasing the ssid/pw. Will happily reconnect on next start
+        WiFi.begin(" ", " ");       // adding this effectively seems to erase the previous stored SSID/PW
+        delay(1000);
+        ESP.restart();
     }
     else {
         //{ "type": "Timmer", "id" : 0, "relayID" : 0, "rcn" : 1, "ts" : 0, "te" : 0, "tc" : 100, "ti" : 0 }
