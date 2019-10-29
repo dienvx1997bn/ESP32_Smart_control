@@ -83,12 +83,13 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
         Serial.println("- failed to open file for writing");
         return;
     }
-    if (file.print(message)) {
+    file.print(message);
+    /*if (file.print(message)) {
         Serial.println("- file written");
     }
     else {
         Serial.println("- frite failed");
-    }
+    }*/
 }
 
 void deleteFile(fs::FS &fs, const char * path) {

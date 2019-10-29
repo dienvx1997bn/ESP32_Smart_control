@@ -7,6 +7,8 @@
 #include <Wire.h>
 #include "RTClib.h"
 
+
+#include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -14,9 +16,8 @@
 #include <MQTT.h>
 #include <DNSServer.h>
 #include <WiFiManager.h>
-#include "BluetoothSerial.h"
-
 #include "WebOTA.h"
+
 #include "FileIO.h"
 #include "RTCTime.h"
 #include "Config.h"
@@ -40,10 +41,24 @@ TaskHandle_t Task2;
 
 WiFiManager wifiManager;
 
+HTTPClient http;
 WiFiClient wifiClient;
+bool isOnline = false;
+
 MQTTClient client;
 
 WebServer server(80);
+
+
+//how many clients should be able to telnet to this ESP32
+#define MAX_SRV_CLIENTS 4
+
+WiFiServer local_server(1234);
+WiFiClient local_serverClients[MAX_SRV_CLIENTS];
+
+#define BUFFER_SIZE 512
+byte buff[BUFFER_SIZE];
+
 /* Put your SSID & Password */
 String APssid = "ESP32";  // Enter SSID here
 const char* APpassword = "12345678";  //Enter Password here
@@ -55,13 +70,15 @@ IPAddress subnet(255, 255, 255, 0);
 
 DateTime dateTime;
 long timeNow;
+#define TIME_UPDATE 2000
+
 Relay relay[MAX_RELAY];
 Timmer timmer[MAX_RELAY];
 AnalogINPUT analogInput[MAX_ANALOG];
 DigitalInput digitalInput[MAX_DIGITAL];
 
 
-void OTA_update() {     
+void OTA_update() {
     String host = "esp";
     host += String(ESP_getChipId());
 
@@ -73,7 +90,7 @@ void OTA_update() {
         Serial.println("Error setting up MDNS responder!");
     }
     else {
-        host += "local";
+        host += ".local";
         Serial.println("mDNS responder started:  " + host);
     }
 
@@ -115,56 +132,65 @@ void OTA_update() {
         }
     });
     server.begin();
+
 }
 
 void MQTT_sendConfig() {
     String msg;
+    String filename;
     DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     JsonArray& data = root.createNestedArray("relayStatus");
 
     for (int i = 0; i < MAX_RELAY; i++) {
-        /*filename = "/timmer";
+        filename = "/timmer";
         filename += i;
         filename += ".txt";
         msg = readFileString(SPIFFS, filename.c_str());
         if (msg != NULL) {
             client.publish(mqtt_topic_config, msg);
             delay(100);
-        }*/
+        }
         if (relay[i].status == RELAY_ON) {
             data.add("ON");
         }
         else {
             data.add("OFF");
         }
-        
+
     }
     root.printTo(msg);
     client.publish(mqtt_topic_config, msg);
 }
 
-void connect() {
-    Serial.print("connecting to wifi...");
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(1000);
-    }
+void connectMQTT() {
+    byte numWait = 0;
+
+    //Serial.print("connecting to wifi");
+    //while (WiFi.status() != WL_CONNECTED && numWait < 10) {
+    //    Serial.print(".");
+    //    delay(1000);
+    //    numWait++;
+    //}
 
     //MQTT connect client
     Serial.print("\nconnecting mqtt...");
     client.begin(mqtt_server.c_str(), mqtt_port, wifiClient);
     client.onMessage(messageReceived);
-
-    while (!client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str())) {
+    numWait = 0;
+    while (numWait < 10) {
+        if (client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str())) {
+            break;
+        }
         Serial.print(".");
         delay(1000);
+        numWait++;
     }
 
     //Sub topic
     client.subscribe(mqtt_topic_control.c_str());
     client.subscribe(mqtt_topic_reponse.c_str());
-    
+
     Serial.println();
     Serial.print("topic control:  ");
     Serial.println(mqtt_topic_control.c_str());
@@ -176,7 +202,7 @@ void messageReceived(String &topic, String &payload) {
     Serial.println("incoming topic: " + topic);
 #endif // DEBUG
     if (topic == mqtt_topic_control) {
-        handleEventControl(payload);
+        handleEventControl(payload.c_str());
     }
     else if (topic == mqtt_topic_reponse) {
 
@@ -192,6 +218,19 @@ void setup_PinMode() {
     }
 }
 
+void checkOnline() {
+    http.begin("http://google.com.vn");
+    int httpCode = http.GET();                                        //Make the request
+    http.end();
+
+    if (httpCode > 0) { //Check for the returning code
+        isOnline = true;
+    }
+    else {
+        isOnline = false;
+        Serial.println("No internet connection");
+    }
+}
 
 void setup() {
     Serial.begin(115200);
@@ -223,19 +262,36 @@ void setup() {
     setup_PinMode();
 
     ////wifimanager here
-    wifiManager.autoConnect();
+    String host = "esp";
+    host += String(ESP_getChipId());
+    wifiManager.setTimeout(60);
 
-    //Connect wifi and mqtt
-    connect();
+    if (wifiManager.autoConnect(host.c_str()) == true) {
+        //OTA
+        OTA_update();
+        delay(1);
 
-    //Send config 
-    MQTT_sendConfig();
+        //checkOnline();
 
-    //RTC setup
-    setupRTC();
+        //if (isOnline == true) {
+            //RTC setup
+        setupRTC();
 
-    OTA_update();
-    delay(1);
+        //Connect wifi and mqtt
+        connectMQTT();
+
+        //Send config 
+        MQTT_sendConfig();
+        /* }
+         else {*/
+         //local controler
+        local_server.begin();
+        local_server.setNoDelay(true);
+        Serial.print("Ready! Use 'telnet ");
+        Serial.print(WiFi.localIP());
+        Serial.println(" 1234' to connect");
+        //}
+    }
 
     xTaskCreatePinnedToCore(
         Task1code,   /* Task function. */
@@ -262,27 +318,50 @@ void setup() {
 //Task1code:   giao tiếp mqtt, update RTC
 void Task1code(void * pvParameters) {
     static unsigned long previousMillis = 0;
+    static unsigned long previousMillisConnect = 0;
+    int counter = 0;
 
     for (;;) {
-        //OTA
-        server.handleClient();
-        //update time
-        dateTime = getRTC().now();
-        timeNow = dateTime.unixtime();
-        unsigned long currentMillis = millis();
-        if (currentMillis - previousMillis >= 2000) {
-            previousMillis = currentMillis;
-            updateRTC();
-            Serial.println(timeNow);
-        }
+        if (WiFi.status() == WL_CONNECTED) {
+            //checkOnline();
+            //if (isOnline) {
+            //OTA
+            server.handleClient();
+            //update time
+            dateTime = getRTC().now();
+            timeNow = dateTime.unixtime();
+            unsigned long currentMillis = millis();
+            if (currentMillis - previousMillis >= TIME_UPDATE) {
+                previousMillis = currentMillis;
+                updateRTC();
+                Serial.println(timeNow);
+            }
 
-        // mqtt
-        if (!client.connected()) {
-            connect();
-        }
-        client.loop();
+            // mqtt
+            if (!client.connected()) {
+                connectMQTT();
+            }
+            client.loop();
 
-        
+            previousMillisConnect = millis();
+
+            /*}
+            else {*/
+            localConnectionHandler();
+            // mqtt
+            /*if (!client.connected() && (millis() - previousMillisConnect > 30000)) {
+                connect();
+                previousMillisConnect = millis();
+            }*/
+            //}
+        }
+        else {
+            Serial.println("WiFi not connected!");
+            for (int i = 0; i < MAX_SRV_CLIENTS; i++) {
+                if (local_serverClients[i]) local_serverClients[i].stop();
+            }
+            delay(1000);
+        }
     }
 }
 
@@ -290,7 +369,7 @@ void Task1code(void * pvParameters) {
 void Task2code(void * pvParameters) {
 
     for (;;) {
-        readSensorSHT(5000);
+        //readSensorSHT(5000);
 
         TimmerHandler();
         digitalHandler();
@@ -303,6 +382,100 @@ void Task2code(void * pvParameters) {
 void loop() {
 
     // Not nedded, Do nothing here
+}
+
+void localConnectionHandler() {
+    uint8_t i;
+    String dataTransfer[MAX_SRV_CLIENTS];
+    if (WiFi.status() == WL_CONNECTED) {
+        //check if there are any new clients
+        if (local_server.hasClient()) {
+            for (i = 0; i < MAX_SRV_CLIENTS; i++) {
+                //find free/disconnected spot
+                if (!local_serverClients[i] || !local_serverClients[i].connected()) {
+                    if (local_serverClients[i]) local_serverClients[i].stop();
+                    local_serverClients[i] = local_server.available();
+                    if (!local_serverClients[i]) Serial.println("available broken");
+                    Serial.print("New client: ");
+                    Serial.print(i); Serial.print(' ');
+                    Serial.println(local_serverClients[i].remoteIP());
+                    break;
+                }
+            }
+            if (i >= MAX_SRV_CLIENTS) {
+                //no free/disconnected spot so reject
+                local_server.available().stop();
+            }
+        }
+        //check clients for data
+        for (i = 0; i < MAX_SRV_CLIENTS; i++) {
+            if (local_serverClients[i] && local_serverClients[i].connected()) {
+                if (local_serverClients[i].available()) {
+                    //get data from the telnet client and push it to the UART
+                    dataTransfer[i] = "";
+                    while (local_serverClients[i].available()) {
+                        char dataRecv = (char) local_serverClients[i].read();
+                        dataTransfer[i] += dataRecv;
+                        //Serial.write(dataRecv);
+                    }
+                    if (dataTransfer[i] != "") {
+                        Serial.println("ok");
+                        handleEventControl(dataTransfer[i].c_str());
+                    }
+                }
+            }
+            else {
+                if (local_serverClients[i]) {
+                    local_serverClients[i].stop();
+                }
+            }
+        }
+        //check UART for data
+        if (Serial.available()) {
+            size_t len = Serial.available();
+            uint8_t sbuf[len];
+            Serial.readBytes(sbuf, len);
+            //push UART data to all connected telnet clients
+            for (i = 0; i < MAX_SRV_CLIENTS; i++) {
+                if (local_serverClients[i] && local_serverClients[i].connected()) {
+                    local_serverClients[i].write(sbuf, len);
+                    delay(1);
+                }
+            }
+        }
+    }
+    else {
+        Serial.println("WiFi not connected!");
+        for (i = 0; i < MAX_SRV_CLIENTS; i++) {
+            if (local_serverClients[i]) local_serverClients[i].stop();
+        }
+        delay(10);
+    }
+
+    //while (clientlocal.connected()) {
+    //    int size = 0;
+    //    // read data from wifi client and send to serial
+    //    while ((size = clientlocal.available())) {
+    //        size = (size >= BUFFER_SIZE ? BUFFER_SIZE : size);
+    //        clientlocal.read(buff, size);
+    //        Serial.write(buff, size);
+    //        Serial.flush();
+    //        String msg = String((char*)buff);
+    //        handleEventControl(msg);
+    //        Serial.println("OK!");
+    //    }
+    //    // read data from serial and send to wifi client
+    //    while ((size = Serial.available())) {
+    //        size = (size >= BUFFER_SIZE ? BUFFER_SIZE : size);
+    //        Serial.readBytes(buff, size);
+    //        clientlocal.write(buff, size);
+    //        clientlocal.flush();
+    //    }
+    //}
+    //Serial.println("client disconnected");
+
+    //clientlocal.stop();
+
 }
 
 void relayProcessing()
@@ -359,7 +532,7 @@ void TimmerHandler()
                 timmer[i].timmerStart += timmer[i].timmerCycle;
                 timmer[i].timmerEnd += timmer[i].timmerCycle;
             }
-            else if(timeNow >= timmer[i].timmerStart && timeNow <= timmer[i].timmerEnd) {      //Nếu là trong thời gian hẹn giờ
+            else if (timeNow >= timmer[i].timmerStart && timeNow <= timmer[i].timmerEnd) {      //Nếu là trong thời gian hẹn giờ
                 relay[relayid].listCondition[relayConditionNumber] = timmerInfluence;
             }
         }
@@ -401,7 +574,7 @@ void digitalHandler()
 
 }
 
-void handleEventControl(String & payload)
+void handleEventControl(const char * payload)
 {
     Serial.println(payload);
 
@@ -433,8 +606,8 @@ void handleEventControl(String & payload)
         //{ "type": "Timmer", "id" : 0, "relayID" : 0, "rcn" : 1, "ts" : 0, "te" : 0, "tc" : 100, "ti" : 0 }
         if (root["type"] == "Timmer") {
             //Serial.print("Timmer action");
-            id = root["id"];
-            timmer[id].relayID = root["relayID"];
+            id = root["relayID"];
+            timmer[id].relayID = id;
             timmer[id].relayConditionNumber = root["rcn"];
             timmer[id].timmerStart = root["ts"];
             timmer[id].timmerEnd = root["te"];
@@ -443,7 +616,7 @@ void handleEventControl(String & payload)
 
             fileName = "/timmer";
         }
-        else if (root["type"] == "Analog") {
+        /*else if (root["type"] == "Analog") {
             id = root["id"];
             byte relayid = (byte)root["relayID"];
             analogInput[id].relayID[relayid] = relayid;
@@ -455,25 +628,18 @@ void handleEventControl(String & payload)
             analogInput[id].analogInfluence = root["ai"];
 
             fileName = "/analog";
-        }
+        }*/
 
         fileName += id;
         fileName += ".txt";
-        writeFile(SPIFFS, fileName.c_str(), payload.c_str());
+        writeFile(SPIFFS, fileName.c_str(), payload);
     }
 }
 
 
 /*
 
-{ "type": "Timmer", "id": 0, "relayID": 0, "relayConditionNumber": 1, "timmerStart": 0, "timmerEnd": 0, "timmerCycle": 100, "timmerInfluence": 0 }
-{ "type": "Timmer", "id": 1, "relayID": 1, "relayConditionNumber": 1, "timmerStart": 1568759150, "timmerEnd": 1568759160, "timmerCycle": 30, "timmerInfluence": 0 }
-{ "type": "Timmer", "id": 2, "relayID": 2, "relayConditionNumber": 1, "timmerStart": 1568759290, "timmerEnd": 1568759350, "timmerCycle": 0, "timmerInfluence": 0 }
-{ "type": "Timmer", "id": 3, "relayID": 2, "relayConditionNumber": 2, "timmerStart": 1568759300, "timmerEnd": 1568759330, "timmerCycle": 0, "timmerInfluence": 0 }
+{ "type": "Timmer", "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
 
-
-{ "type": "Timmer", "id": 0, "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
-
-//ESP2646569276
 
 */

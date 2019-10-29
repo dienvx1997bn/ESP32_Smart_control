@@ -21,7 +21,7 @@ RTC_DS3231 getRTC() {
 void setupRTC() {
     if (!rtc.begin()) {
         Serial.println("Couldn't find RTC");
-        while (1);
+        //while (1);
     }
 
     if (rtc.lostPower()) {
@@ -37,7 +37,6 @@ void setupRTC() {
 
     setSyncProvider(getNtpTime);
     setSyncInterval(300);
-
 }
 
 void updateRTC() {

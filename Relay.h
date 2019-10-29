@@ -26,6 +26,8 @@ public:
     ~Relay();
 
     bool setRelay(byte index, byte pinIO, byte state);  //return 1 if has change relay status, else return 0
+
+    void setRelay595();
 };
 
 
