@@ -1,3 +1,4 @@
+
 #include <vfs_api.h>
 #include <FSImpl.h>
 #include <FS.h>
@@ -17,6 +18,8 @@
 #include <DNSServer.h>
 #include <WiFiManager.h>
 #include "WebOTA.h"
+#include <ShiftRegister74HC595.h>
+
 
 #include "FileIO.h"
 #include "RTCTime.h"
@@ -26,7 +29,6 @@
 #include "DigitalInput.h"
 #include "Timmer.h"
 #include "Sensor.h"
-
 
 //#define DEBUG
 //
@@ -73,10 +75,11 @@ long timeNow;
 #define TIME_UPDATE 2000
 
 Relay relay[MAX_RELAY];
+ShiftRegister74HC595 sr(1, 13, 14, 15);
+
 Timmer timmer[MAX_RELAY];
 AnalogINPUT analogInput[MAX_ANALOG];
 DigitalInput digitalInput[MAX_DIGITAL];
-
 
 void OTA_update() {
     String host = "esp";
@@ -161,6 +164,8 @@ void MQTT_sendConfig() {
     }
     root.printTo(msg);
     client.publish(mqtt_topic_config, msg);
+
+    client.publish(mqtt_topic_config, WiFi.localIP().toString());
 }
 
 void connectMQTT() {
@@ -210,12 +215,28 @@ void messageReceived(String &topic, String &payload) {
 }
 
 void setup_PinMode() {
-    for (byte i = 0; i < MAX_RELAY; i++) {
-        pinMode(relay[i].pinIO, OUTPUT);
-        /* digitalWrite(relayPin[i], LOW);
-         delay(200);*/
-        digitalWrite(relay[i].pinIO, HIGH);
+
+    pinMode(15, OUTPUT);
+    pinMode(13, OUTPUT);
+    pinMode(14, OUTPUT);
+
+    //Relay::setRelay595(255);
+    for (int i = 0; i < MAX_RELAY; i++) {
+        /*Relay::setRelay(i, relay[i].status);*/
+        //if (relay[i].numCondition > 0) {
+        if (relay[i].status == RELAY_ON) {
+            //relay.setRelayOn(i);
+            sr.setNoUpdate(i, RELAY_ON);
+        }
+        else if (relay[i].status == RELAY_OFF) {
+            //relay.setRelayOff(i);
+            sr.setNoUpdate(i, RELAY_OFF);
+        }
+        relay[i].oldStatus = relay[i].status;
+        updateRelayConfig(SPIFFS, i);   //cập nhật vào file
+    //}
     }
+    sr.updateRegisters();
 }
 
 void checkOnline() {
@@ -266,12 +287,11 @@ void setup() {
     host += String(ESP_getChipId());
     wifiManager.setTimeout(60);
 
-    if (wifiManager.autoConnect(host.c_str()) == true) {
+    if (wifiManager.autoConnect(host.c_str())) {
+        WiFi.softAPdisconnect(true);
+
         //OTA
         OTA_update();
-        delay(1);
-
-        //checkOnline();
 
         //if (isOnline == true) {
             //RTC setup
@@ -291,7 +311,10 @@ void setup() {
         Serial.print(WiFi.localIP());
         Serial.println(" 1234' to connect");
         //}
+
     }
+
+
 
     xTaskCreatePinnedToCore(
         Task1code,   /* Task function. */
@@ -370,10 +393,7 @@ void Task2code(void * pvParameters) {
 
     for (;;) {
         //readSensorSHT(5000);
-
         TimmerHandler();
-        digitalHandler();
-        analogHandler();
 
         relayProcessing();
     }
@@ -414,7 +434,7 @@ void localConnectionHandler() {
                     //get data from the telnet client and push it to the UART
                     dataTransfer[i] = "";
                     while (local_serverClients[i].available()) {
-                        char dataRecv = (char) local_serverClients[i].read();
+                        char dataRecv = (char)local_serverClients[i].read();
                         dataTransfer[i] += dataRecv;
                         //Serial.write(dataRecv);
                     }
@@ -480,29 +500,53 @@ void localConnectionHandler() {
 
 void relayProcessing()
 {
-    byte i, j;
-    byte sum = 0;
+    //Serial.println("---relay process---");
+    int i, j;
+    int sum = 0;
     for (i = 0; i < MAX_RELAY; i++) {
+        //Serial.print(relay[i].status);
+
         if (relay[i].numCondition < 1) {
-            continue;   // Nếu không đc gắn cho bất kỳ tác động nào
+            //continue;   // Nếu không đc gắn cho bất kỳ tác động nào
         }
         else {
+            //Serial.print("relay ");
+            //Serial.print(i);
+            //Serial.print(" status:  ");
+            sum = 0;
+
             for (j = 0; j < relay[i].numCondition; j++) {
                 sum += relay[i].listCondition[j];
             }
-            if (sum == RELAY_ON) {                 //Tất cả đều thỏa mãn là ON thì mới ON
+
+            if (sum == 0) {                 //Tất cả đều thỏa mãn là ON thì mới ON
                 relay[i].status = RELAY_ON;
             }
             else {
                 relay[i].status = RELAY_OFF;
             }
 
-            if (relay[i].setRelay(i, relay[i].pinIO, relay[i].status) == 1) {   //nếu có sự thay đổi trạng thái relay thì cập nhật vào file
-                updateRelayConfig(SPIFFS, i);
-            }
-        }
+            if (relay[i].oldStatus != relay[i].status) {  //Nếu có sư thay đổi trạng thái 
+                if (relay[i].status == RELAY_ON)
+                    //relay.setRelayOn(i);
+                    sr.setNoUpdate(i, RELAY_ON);
 
+                else if (relay[i].status == RELAY_OFF)
+                    //relay.setRelayOff(i);
+                    sr.setNoUpdate(i, RELAY_OFF);
+
+                relay[i].oldStatus = relay[i].status;
+                updateRelayConfig(SPIFFS, i);   //cập nhật vào file
+
+                //Serial.print("relay change:  ");
+                //Serial.println(i);
+            }
+
+        }
     }
+    sr.updateRegisters();
+    /*Serial.println();
+    Serial.println(*(sr.getAll()), BIN);*/
 }
 
 void TimmerHandler()
@@ -510,15 +554,16 @@ void TimmerHandler()
     byte i;
     int relayid, relayConditionNumber, timmerInfluence;
 
-    for (i = 0; i < MAX_RELAY; i++) {    // Duyệt timmer
-        if (timmer[i].relayID != -1) {  // Nếu timmer đã đc gắn cho relay nào đó
+    for (i = 0; i < MAX_RELAY; i++) {       // Duyệt timmer
+        if (timmer[i].relayID != -1) {      // Nếu timmer đã đc gắn cho relay nào đó
             relayid = timmer[i].relayID;
             relayConditionNumber = timmer[i].relayConditionNumber;
             timmerInfluence = timmer[i].timmerInfluence;
 
-            //Serial.print("relay id:   ");
-            //Serial.println(timmer[i].relayID);
-            relay[relayid].numCondition = relayConditionNumber;
+            if (relay[relayid].numCondition < relayConditionNumber) {
+                relay[relayid].numCondition = relayConditionNumber;
+            }
+
             relayConditionNumber = relayConditionNumber - 1; //chỉ số thấp hơn giá trị 1 đơn vị
 
             if (timmer[i].timmerStart == 0 && timmer[i].timmerEnd == 0) { // Nếu là bật hoặc tắt 
@@ -535,6 +580,18 @@ void TimmerHandler()
             else if (timeNow >= timmer[i].timmerStart && timeNow <= timmer[i].timmerEnd) {      //Nếu là trong thời gian hẹn giờ
                 relay[relayid].listCondition[relayConditionNumber] = timmerInfluence;
             }
+            //TODO: DEBUG
+           /* Serial.print("timmer id ");
+            Serial.println(i);
+
+            Serial.print("relay id ");
+            Serial.println(relayid);
+
+            Serial.print("relay numCondition ");
+            Serial.println(relay[relayid].numCondition);
+
+            Serial.print("relay action ");
+            Serial.println(timmerInfluence);*/
         }
     }
 }
@@ -576,10 +633,11 @@ void digitalHandler()
 
 void handleEventControl(const char * payload)
 {
+
     Serial.println(payload);
 
     String fileName = "";
-    byte id;
+    int id;
 
     StaticJsonBuffer<500>jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(payload);
@@ -588,7 +646,7 @@ void handleEventControl(const char * payload)
         return;
     }
     else {
-        Serial.println("JSON parse OK!");
+        //Serial.println("JSON parse OK!");
     }
 
     if (root["type"] == "remove") {
@@ -599,15 +657,18 @@ void handleEventControl(const char * payload)
     else if (root["type"] == "reset") {
         WiFi.disconnect(true);   // still not erasing the ssid/pw. Will happily reconnect on next start
         WiFi.begin(" ", " ");       // adding this effectively seems to erase the previous stored SSID/PW
-        delay(1000);
+
+        //reset
+        digitalWrite(0, HIGH);//
+        delay(100);
         ESP.restart();
     }
     else {
-        //{ "type": "Timmer", "id" : 0, "relayID" : 0, "rcn" : 1, "ts" : 0, "te" : 0, "tc" : 100, "ti" : 0 }
+        //{ "type": "Timmer", "id" : 0 "relayID" : 0, "rcn" : 1, "ts" : 0, "te" : 0, "tc" : 100, "ti" : 0 }
         if (root["type"] == "Timmer") {
             //Serial.print("Timmer action");
-            id = root["relayID"];
-            timmer[id].relayID = id;
+            id = root["id"];
+            timmer[id].relayID = root["relayID"];
             timmer[id].relayConditionNumber = root["rcn"];
             timmer[id].timmerStart = root["ts"];
             timmer[id].timmerEnd = root["te"];
@@ -634,12 +695,13 @@ void handleEventControl(const char * payload)
         fileName += ".txt";
         writeFile(SPIFFS, fileName.c_str(), payload);
     }
+
 }
 
 
 /*
 
-{ "type": "Timmer", "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
+{ "type": "Timmer", "id": 0,  "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
 
 
 */

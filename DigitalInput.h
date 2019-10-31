@@ -2,7 +2,7 @@
 #include "Arduino.h"
 #include "Relay.h"
 
-#define MAX_DIGITAL 4
+#define MAX_DIGITAL 8
 
 class DigitalInput
 {

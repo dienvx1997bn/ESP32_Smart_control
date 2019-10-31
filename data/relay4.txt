@@ -1,0 +1,1 @@
+{ "name": "thiet bi 4", "listCondition": [], "numCondition": 0, "action": 1 }

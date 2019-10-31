@@ -2,7 +2,7 @@
 #include "Relay.h"
 
 
-#define MAX_ANALOG 2
+#define MAX_ANALOG 8
 
 class AnalogINPUT
 {

@@ -5,6 +5,8 @@
 #include "ArduinoJson.h"
 #include "Config.h"
 #include "Timmer.h"
+#include "Arduino.h"
+
 
 char fileData[512];
 int counter = 0;
@@ -149,13 +151,13 @@ int readRelayConfig(fs::FS &fs) {
             continue;
         }
 
-        relay[i].pinIO = root["pinIO"];
         relay[i].name = root["name"].asString();
         relay[i].numCondition = root["numCondition"];
         for (byte j = 0; j < relay[i].numCondition; j++) {
             relay[i].listCondition[j] = root["listCondition"][j];
         }
         relay[i].status = root["action"];
+        relay[i].oldStatus = relay[i].status;
 
         counter = 0;
         relayFileName = "/relay";
@@ -238,13 +240,12 @@ void updateRelayConfig(fs::FS &fs, byte index)
     JsonObject& root = jsonBuffer.createObject();
     JsonArray& listCondition = root.createNestedArray("listCondition");
 
-    root["pinIO"] = relay[index].pinIO;
     root["name"] = relay[index].name;
     root["numCondition"] = relay[index].numCondition;
     for (byte j = 0; j < relay[index].numCondition; j++) {
         listCondition.add(relay[index].listCondition[j]);
     }
-    root["action"] = relay[index].oldStatus;
+    root["action"] = relay[index].status;
 
     root.printTo(relayData);
     writeFile(fs, fileName.c_str(), relayData.c_str());

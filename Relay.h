@@ -1,33 +1,31 @@
-#pragma once
-#include <ArduinoJson.h>
-#include "Arduino.h"
+﻿#pragma once
 
-#define MAX_RELAY 4
+#if ARDUINO < 100
+#include <WProgram.h>
+#else
+#include <Arduino.h>
+#endif
+#include <ArduinoJson.h>
+
+#define MAX_RELAY 8
 #define MAX_CONDITION 4
 
 
 #define RELAY_ON    0
 #define RELAY_OFF   1
 
+static byte leds = 0B11111111;
 
-class Relay
+
+struct Relay
 {
-public:
-    byte pinIO;
+
     String name;
     byte listCondition[MAX_CONDITION];
     byte numCondition = 0;
     byte status = RELAY_OFF;
-    byte oldStatus = RELAY_OFF;
+    byte oldStatus = 2;
 
-
-public:
-    Relay();
-    ~Relay();
-
-    bool setRelay(byte index, byte pinIO, byte state);  //return 1 if has change relay status, else return 0
-
-    void setRelay595();
 };
 
 

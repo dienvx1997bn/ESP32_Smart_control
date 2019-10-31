@@ -1,1 +1,1 @@
-{ "ssid": "DDD", "password": "haiauluotgio", "mqtt_server": "soldier.cloudmqtt.com", "mqtt_port": 15258, "mqtt_user": "jhqlhwjr", "mqtt_pwd": "26Yvz_31t907", "id":"608116286F24" }
+{ "ssid": "DLCORP", "password": "0987888620", "mqtt_server": "soldier.cloudmqtt.com", "mqtt_port": 15258, "mqtt_user": "jhqlhwjr", "mqtt_pwd": "26Yvz_31t907", "id":"608116286F24" }
