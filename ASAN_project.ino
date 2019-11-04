@@ -30,13 +30,6 @@
 #include "Timmer.h"
 #include "Sensor.h"
 
-//#define DEBUG
-//
-//#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-//#error Bluetooth is not enabled!
-//#endif
-//BluetoothSerial SerialBT;
-
 // Mutil task
 TaskHandle_t Task1;
 TaskHandle_t Task2;
@@ -66,18 +59,22 @@ String APssid = "ESP32";  // Enter SSID here
 const char* APpassword = "12345678";  //Enter Password here
 
 /* Put IP Address details */
-IPAddress local_ip(192, 168, 1, 1);
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 255, 0);
+//IPAddress local_ip(192, 168, 1, 1);
+//IPAddress gateway(192, 168, 1, 1);
+//IPAddress subnet(255, 255, 255, 0);
 
 DateTime dateTime;
 long timeNow;
-#define TIME_UPDATE 2000
+#define TIME_UPDATE 5000
 
 Relay relay[MAX_RELAY];
-ShiftRegister74HC595 sr(1, 13, 14, 15);
+ShiftRegister74HC595 relayStatus(1, 13, 14, 15);
+// Creates a MUX74HC4067 instance
+// 1st argument is the Arduino PIN to which the EN pin connects
+// 2nd-5th arguments are the Arduino PINs to which the S0-S3 pins connect
+MUX74HC4067 mux(33, 27, 2, 25, 26);
 
-Timmer timmer[MAX_RELAY];
+Timmer timmer[MAX_TIMMER];
 AnalogINPUT analogInput[MAX_ANALOG];
 DigitalInput digitalInput[MAX_DIGITAL];
 
@@ -138,7 +135,40 @@ void OTA_update() {
 
 }
 
-void MQTT_sendConfig() {
+void MQTT_sendTimmerConfig(int index) {
+    if (index < 0 || index > MAX_TIMMER) {
+        return;
+    }
+
+    String filename = "/timmer";
+    filename += index;
+    filename += ".txt";
+    String msg = readFileString(SPIFFS, filename.c_str());
+    if (msg != NULL) {
+        client.publish(mqtt_topic_config, msg);
+        delay(100);
+    }
+    else {
+        Serial.println("No timmer");
+    }
+
+}
+
+void MQTT_sendWifiIP() {
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+
+    root["ssid"] = WiFi.SSID();
+    root["ip"] = WiFi.localIP().toString();
+
+    String msg;
+    root.printTo(msg);
+
+    client.publish(mqtt_topic_config, msg.c_str());
+    delay(100);
+}
+
+void MQTT_sendRelayConfig() {
     String msg;
     String filename;
     DynamicJsonBuffer jsonBuffer;
@@ -146,14 +176,7 @@ void MQTT_sendConfig() {
     JsonArray& data = root.createNestedArray("relayStatus");
 
     for (int i = 0; i < MAX_RELAY; i++) {
-        filename = "/timmer";
-        filename += i;
-        filename += ".txt";
-        msg = readFileString(SPIFFS, filename.c_str());
-        if (msg != NULL) {
-            client.publish(mqtt_topic_config, msg);
-            delay(100);
-        }
+
         if (relay[i].status == RELAY_ON) {
             data.add("ON");
         }
@@ -165,7 +188,6 @@ void MQTT_sendConfig() {
     root.printTo(msg);
     client.publish(mqtt_topic_config, msg);
 
-    client.publish(mqtt_topic_config, WiFi.localIP().toString());
 }
 
 void connectMQTT() {
@@ -194,7 +216,7 @@ void connectMQTT() {
 
     //Sub topic
     client.subscribe(mqtt_topic_control.c_str());
-    client.subscribe(mqtt_topic_reponse.c_str());
+    client.subscribe(mqtt_topic_request.c_str());
 
     Serial.println();
     Serial.print("topic control:  ");
@@ -209,8 +231,8 @@ void messageReceived(String &topic, String &payload) {
     if (topic == mqtt_topic_control) {
         handleEventControl(payload.c_str());
     }
-    else if (topic == mqtt_topic_reponse) {
-
+    else if (topic == mqtt_topic_request) {
+        handleEventResquest(payload.c_str());
     }
 }
 
@@ -220,23 +242,25 @@ void setup_PinMode() {
     pinMode(13, OUTPUT);
     pinMode(14, OUTPUT);
 
+    relayStatus.setAllHigh();
+
     //Relay::setRelay595(255);
     for (int i = 0; i < MAX_RELAY; i++) {
         /*Relay::setRelay(i, relay[i].status);*/
         //if (relay[i].numCondition > 0) {
         if (relay[i].status == RELAY_ON) {
             //relay.setRelayOn(i);
-            sr.setNoUpdate(i, RELAY_ON);
+            relayStatus.setNoUpdate(i, RELAY_ON);
         }
         else if (relay[i].status == RELAY_OFF) {
             //relay.setRelayOff(i);
-            sr.setNoUpdate(i, RELAY_OFF);
+            relayStatus.setNoUpdate(i, RELAY_OFF);
         }
         relay[i].oldStatus = relay[i].status;
         updateRelayConfig(SPIFFS, i);   //cập nhật vào file
     //}
     }
-    sr.updateRegisters();
+    relayStatus.updateRegisters();
 }
 
 void checkOnline() {
@@ -277,15 +301,22 @@ void setup() {
     delay(10);*/
     readTimmerConfig(SPIFFS);
     delay(10);
+    readDigitalInput(SPIFFS);
+    delay(10);
+
 
     Serial.setTimeout(500);
 
     setup_PinMode();
 
+    //digital Input
+    mux.signalPin(4, INPUT, DIGITAL);
+
     ////wifimanager here
     String host = "esp";
     host += String(ESP_getChipId());
-    wifiManager.setTimeout(60);
+    wifiManager.setTimeout(90);
+
 
     if (wifiManager.autoConnect(host.c_str())) {
         WiFi.softAPdisconnect(true);
@@ -301,7 +332,10 @@ void setup() {
         connectMQTT();
 
         //Send config 
-        MQTT_sendConfig();
+        MQTT_sendRelayConfig();
+        //send wifiIP
+        MQTT_sendWifiIP();
+
         /* }
          else {*/
          //local controler
@@ -348,8 +382,7 @@ void Task1code(void * pvParameters) {
         if (WiFi.status() == WL_CONNECTED) {
             //checkOnline();
             //if (isOnline) {
-            //OTA
-            server.handleClient();
+
             //update time
             dateTime = getRTC().now();
             timeNow = dateTime.unixtime();
@@ -368,17 +401,15 @@ void Task1code(void * pvParameters) {
 
             previousMillisConnect = millis();
 
-            /*}
-            else {*/
             localConnectionHandler();
-            // mqtt
-            /*if (!client.connected() && (millis() - previousMillisConnect > 30000)) {
-                connect();
-                previousMillisConnect = millis();
-            }*/
-            //}
+
         }
         else {
+            if (!client.connected() && (millis() - previousMillisConnect > 60000)) {
+                wifiManager.autoConnect(host.c_str());
+                previousMillisConnect = millis();
+            }
+
             Serial.println("WiFi not connected!");
             for (int i = 0; i < MAX_SRV_CLIENTS; i++) {
                 if (local_serverClients[i]) local_serverClients[i].stop();
@@ -392,7 +423,11 @@ void Task1code(void * pvParameters) {
 void Task2code(void * pvParameters) {
 
     for (;;) {
+        //OTA
+        server.handleClient();
+
         //readSensorSHT(5000);
+        digitalHandler();
         TimmerHandler();
 
         relayProcessing();
@@ -529,22 +564,22 @@ void relayProcessing()
             if (relay[i].oldStatus != relay[i].status) {  //Nếu có sư thay đổi trạng thái 
                 if (relay[i].status == RELAY_ON)
                     //relay.setRelayOn(i);
-                    sr.setNoUpdate(i, RELAY_ON);
+                    relayStatus.setNoUpdate(i, RELAY_ON);
 
                 else if (relay[i].status == RELAY_OFF)
                     //relay.setRelayOff(i);
-                    sr.setNoUpdate(i, RELAY_OFF);
+                    relayStatus.setNoUpdate(i, RELAY_OFF);
 
                 relay[i].oldStatus = relay[i].status;
                 updateRelayConfig(SPIFFS, i);   //cập nhật vào file
-
+                MQTT_sendRelayConfig();
                 //Serial.print("relay change:  ");
                 //Serial.println(i);
             }
 
         }
     }
-    sr.updateRegisters();
+    relayStatus.updateRegisters();
     /*Serial.println();
     Serial.println(*(sr.getAll()), BIN);*/
 }
@@ -628,28 +663,91 @@ void analogHandler()
 
 void digitalHandler()
 {
+    String fileTimmer;
+    String fileData = "";
+    byte isSomethingChanged = 0;
 
+    for (byte i = 8; i < 16; ++i)
+    {
+
+        digitalInput[i].status = mux.read(i);
+
+        if (digitalInput[i].status != digitalInput[i].old_status) {
+            digitalInput[i].old_status = digitalInput[i].status;
+            isSomethingChanged++;
+            byte timmerID = i - MAX_RELAY;
+
+            DynamicJsonBuffer jsonBuffer;
+            JsonObject& root = jsonBuffer.createObject();
+
+            root["relayID"] = timmerID;
+            root["rcn"] = 1;
+            root["ts"] = 0;
+            root["te"] = 0;
+            root["tc"] = 0;
+            root["ti"] = !timmer[timmerID].timmerInfluence;
+
+            root.printTo(fileData);
+            fileTimmer = "/timmer";
+            fileTimmer += (timmerID);
+            fileTimmer += ".txt";
+            writeFile(SPIFFS, fileTimmer.c_str(), fileData.c_str());
+
+            timmer[timmerID].relayID = timmerID;
+            timmer[timmerID].relayConditionNumber = 1;
+            timmer[timmerID].timmerStart = 0;
+            timmer[timmerID].timmerEnd = 0;
+            timmer[timmerID].timmerCycle = 0;
+            timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
+            delay(10);
+        }
+    }
+
+    if (isSomethingChanged > 0) {
+        DynamicJsonBuffer jsonBuffer_2;
+        JsonObject& root2 = jsonBuffer_2.createObject();
+        JsonArray& status = root2.createNestedArray("status");
+
+        for (byte i = 8; i < 16; ++i) {
+            status.add(digitalInput[i].status);
+        }
+
+        const char *fileName = "/inputs.txt";
+        root2.printTo(fileData);
+        writeFile(SPIFFS, fileName, fileData.c_str());
+    }
+}
+
+void handleEventResquest(const char * payload) {
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(payload);
+
+    String type = root[F("type")];
+
+    if (type == "relays") {
+        MQTT_sendRelayConfig();
+    }
+    else if (type == "wifi") {
+        MQTT_sendWifiIP();
+    }
+    else if (type == "timmer") {
+        MQTT_sendTimmerConfig(root["id"]);
+    }
 }
 
 void handleEventControl(const char * payload)
 {
-
     Serial.println(payload);
 
-    String fileName = "";
-    int id;
-
-    StaticJsonBuffer<500>jsonBuffer;
+    DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(payload);
     if (!root.success()) {
         Serial.println("JSON parse failed");
         return;
     }
-    else {
-        //Serial.println("JSON parse OK!");
-    }
 
-    if (root["type"] == "remove") {
+
+    if (root["type"].asString() == "remove") {
         String fileName = root["file"];
         fileName += ".txt";
         deleteFile(SPIFFS, fileName.c_str());
@@ -664,8 +762,11 @@ void handleEventControl(const char * payload)
         ESP.restart();
     }
     else {
-        //{ "type": "Timmer", "id" : 0 "relayID" : 0, "rcn" : 1, "ts" : 0, "te" : 0, "tc" : 100, "ti" : 0 }
-        if (root["type"] == "Timmer") {
+        String fileName = "/timmer";
+        int id;
+
+        //{"type":"timmer","id":1,"relayID":1,"rcn":1,"ts":"0","te":"0","ti":0}
+        if (root["type"] == "timmer") {
             //Serial.print("Timmer action");
             id = root["id"];
             timmer[id].relayID = root["relayID"];
@@ -677,19 +778,9 @@ void handleEventControl(const char * payload)
 
             fileName = "/timmer";
         }
-        /*else if (root["type"] == "Analog") {
-            id = root["id"];
-            byte relayid = (byte)root["relayID"];
-            analogInput[id].relayID[relayid] = relayid;
-            analogInput[id].relayConditionNumber[relayid] = root["rcn"];
-            analogInput[id].name = root["name"].asString();
-            analogInput[id].upper = root["u"];
-            analogInput[id].lower = root["l"];
-            analogInput[id].gain = root["g"];
-            analogInput[id].analogInfluence = root["ai"];
-
-            fileName = "/analog";
-        }*/
+        else {
+            return;
+        }
 
         fileName += id;
         fileName += ".txt";
@@ -701,7 +792,9 @@ void handleEventControl(const char * payload)
 
 /*
 
-{ "type": "Timmer", "id": 0,  "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
-
+{ "type": "timmer", "id": 0,  "relayID": 0, "rcn": 1, "ts": 0, "te": 0, "tc": 0, "ti": 0 }
+{ "type": "timmer","id":0}
+{ "type": "relays"}
+{ "type": "wifi"}
 
 */

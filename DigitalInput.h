@@ -1,32 +1,14 @@
 ﻿#pragma once
 #include "Arduino.h"
 #include "Relay.h"
+#include "MUX74HC4067.h"
 
-#define MAX_DIGITAL 8
+#define MAX_DIGITAL 16
 
-class DigitalInput
+
+struct DigitalInput
 {
-public:
-    int relayID = -1;
-    byte relayConditionNumber;  // Điều kiện thứ i của relay.listCondigion
-
-    byte state;     // Giá trị đo
-    byte digitalInfluence;  // Tác động kết quả lên relay
-    String name;
-    byte pinIO;
-
-
-    DigitalInput();
-    ~DigitalInput();
-
-private:
+    int status;     // Giá trị đo
+    int old_status = 0;     // Giá trị đo
 
 };
-
-DigitalInput::DigitalInput()
-{
-}
-
-DigitalInput::~DigitalInput()
-{
-}

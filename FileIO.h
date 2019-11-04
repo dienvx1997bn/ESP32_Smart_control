@@ -6,13 +6,15 @@
 #include "Config.h"
 #include "Timmer.h"
 #include "Arduino.h"
-
+#include "DigitalInput.h"
 
 char fileData[512];
 int counter = 0;
 extern Relay relay[MAX_RELAY];
-extern Timmer timmer[MAX_RELAY];
+extern Timmer timmer[MAX_TIMMER];
 extern AnalogINPUT analogInput[MAX_ANALOG];
+extern DigitalInput digitalInput[MAX_DIGITAL];
+
 
 #define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
 
@@ -60,7 +62,7 @@ String readFileString(fs::FS &fs, const char * path) {
 }
 
 int readFile(fs::FS &fs, const char * path) {
-    //Serial.printf("Reading file: %s\r\n", path);
+    Serial.printf("Reading file: %s\r\n", path);
     counter = 0;
     File file = fs.open(path);
     if (!file || file.isDirectory()) {
@@ -86,12 +88,12 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
         return;
     }
     file.print(message);
-    /*if (file.print(message)) {
+    if (file.print(message)) {
         Serial.println("- file written");
     }
     else {
         Serial.println("- frite failed");
-    }*/
+    }
 }
 
 void deleteFile(fs::FS &fs, const char * path) {
@@ -120,7 +122,7 @@ int readDeviceInfor(fs::FS &fs) {
     }
 
     device_id = String(ESP_getChipId());
-    mqtt_topic_reponse += device_id;
+    mqtt_topic_request += device_id;
     mqtt_topic_config += device_id;
     mqtt_topic_control += device_id;
     mqtt_user = root["mqtt_user"].asString();
@@ -129,6 +131,25 @@ int readDeviceInfor(fs::FS &fs) {
     password = root["password"].asString();
     mqtt_server = root["mqtt_server"].asString();
     mqtt_port = root["mqtt_port"];
+
+}
+
+void readDigitalInput(fs::FS &fs) {
+    String relayFileName = "/inputs.txt";
+    memset(fileData, 0, 512);
+    if (!readFile(fs, relayFileName.c_str())) {
+        return;
+    }
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(fileData);
+    if (!root.success()) {
+        Serial.println("relay Not success!");
+        return;
+    }
+    for (byte i = 0; i < MAX_DIGITAL; i++) {
+        digitalInput[i].old_status = root["status"][i];
+        //digitalInput[i].status = digitalInput[i].old_status;
+    }
 
 }
 

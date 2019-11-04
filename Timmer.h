@@ -2,7 +2,7 @@
 #include "Relay.h"
 #include "Arduino.h"
 
-
+#define MAX_TIMMER 16
 
 class Timmer
 {
