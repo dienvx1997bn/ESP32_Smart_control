@@ -157,6 +157,7 @@ void readDigitalInput(fs::FS &fs) {
 int readRelayConfig(fs::FS &fs) {
     String relayFileName = "/relay";
     for (byte i = 0; i < MAX_RELAY; i++) {
+        relayFileName = "/relay";
         memset(fileData, 0, 512);
         relayFileName += i;
         relayFileName += ".txt";
@@ -181,7 +182,6 @@ int readRelayConfig(fs::FS &fs) {
         relay[i].oldStatus = relay[i].status;
 
         counter = 0;
-        relayFileName = "/relay";
     }
 }
 
@@ -224,8 +224,9 @@ int readAnalogConfig(fs::FS &fs) {
 //
 int readTimmerConfig(fs::FS &fs) {
     String timmerFileName = "/timmer";
-    for (byte i = 0; i < MAX_RELAY; i++) {
+    for (byte i = 0; i < MAX_TIMMER; i++) {
         memset(fileData, 0, 512);
+        timmerFileName = "/timmer";
         timmerFileName += i;
         timmerFileName += ".txt";
         if (!readFile(fs, timmerFileName.c_str())) {
@@ -247,7 +248,6 @@ int readTimmerConfig(fs::FS &fs) {
         timmer[i].timmerCycle = root["tc"];
         timmer[i].timmerInfluence = root["ti"];
 
-        timmerFileName = "/timmer";
     }
 }
 

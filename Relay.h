@@ -7,24 +7,22 @@
 #endif
 #include <ArduinoJson.h>
 
-#define MAX_RELAY 8
-#define MAX_CONDITION 4
+#define MAX_RELAY 16
+#define MAX_CONDITION 3
 
 
 #define RELAY_ON    0
 #define RELAY_OFF   1
-
-static byte leds = 0B11111111;
 
 
 struct Relay
 {
 
     String name;
-    byte listCondition[MAX_CONDITION];
-    byte numCondition = 0;
-    byte status = RELAY_OFF;
-    byte oldStatus = 2;
+    int listCondition[MAX_CONDITION];
+    int numCondition = 0;
+    int status = RELAY_OFF;
+    int oldStatus = -1;
 
 };
 
