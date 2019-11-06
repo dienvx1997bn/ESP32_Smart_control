@@ -138,6 +138,7 @@ void OTA_update() {
 }
 
 void MQTT_sendTimmerConfig(int index) {
+    Serial.println("send timmer config");
     if (index < 0 || index > MAX_TIMMER) {
         return;
     }
@@ -145,50 +146,60 @@ void MQTT_sendTimmerConfig(int index) {
     String filename = "/timmer";
     filename += index;
     filename += ".txt";
-    String msg = readFileString(SPIFFS, filename.c_str());
-    if (msg != NULL) {
+    String msg;
+    if (readFileString(SPIFFS, filename.c_str(), msg)) {
+        //msg = "{\"type\":\"timmer\", \"id\" : 0, \"relayID\" : 0, \"rcn\" : 1, \"ts\" : 0, \"te\" : 0, \"tc\" : 0, \"ti\" : 0}";
         client.publish(mqtt_topic_config, msg.c_str());
-        delay(100);
     }
     else {
         Serial.println("No timmer");
     }
-
+    delay(10);
 }
 
 void MQTT_sendWifiIP() {
-    StaticJsonBuffer<200> jsonBuffer;
+    Serial.println("send wifi config");
+    StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
-
+    if (!root.success()) {
+        Serial.println("JSON parse failed");
+        return;
+    }
     root["ssid"] = WiFi.SSID();
     root["ip"] = WiFi.localIP().toString();
 
-    String msg;
-    root.printTo(msg);
+    char msg[200];
+    root.printTo(msg, sizeof(msg));
 
-    client.publish(mqtt_topic_config, msg.c_str());
-    delay(100);
+    client.publish(mqtt_topic_config, msg);
+    delay(10);
 }
 
 void MQTT_sendRelayConfig() {
-    String msg;
-    String filename;
-    StaticJsonBuffer<400> jsonBuffer;
+    Serial.println("send relay config");
+    StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
-    JsonArray& data = root.createNestedArray("relayStatus");
+    if (!root.success()) {
+        Serial.println("JSON parse failed");
+        return;
+    }
+    root["ON"] = RELAY_ON;
+    root["OFF"] = RELAY_OFF;
 
+    JsonArray& data = root.createNestedArray("relayStatus");
     for (int i = 0; i < MAX_RELAY; i++) {
-        //if (relay[i].status == RELAY_ON) {
-        //    data.add("ON");
-        //}
-        //else {
-        //    data.add("OFF");
-        //}
+        /*if (relay[i].status == RELAY_ON) {
+            data.add("ON");
+        }
+        else {
+            data.add("OFF");
+        }*/
         data.add(relay[i].status);
     }
-    root.printTo(msg);
-    client.publish(mqtt_topic_config, msg.c_str());
-    delay(100);
+    char msg[512];
+    root.printTo(msg, sizeof(msg));
+    client.publish(mqtt_topic_config, msg);
+    delay(10);
 }
 
 void connectMQTT() {
@@ -199,24 +210,27 @@ void connectMQTT() {
     client.begin(mqtt_server.c_str(), mqtt_port, wifiClient);
     client.onMessage(messageReceived);
     numWait = 0;
+    client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str());
     while (numWait < 10) {
-        if (client.connect(mqtt_clientID.c_str(), mqtt_user.c_str(), mqtt_pwd.c_str())) {
+        if (client.connected()) {
             break;
         }
         Serial.print(".");
-        delay(200);
+        delay(500);
         numWait++;
     }
 
     if (numWait < 10) {
-        Serial.println("mqtt connected");
+        Serial.println("connected");
         //Sub topic
-        client.subscribe(mqtt_topic_control.c_str());
         client.subscribe(mqtt_topic_request.c_str());
+        client.subscribe(mqtt_topic_control.c_str());
 
-        Serial.println();
         Serial.print("topic control:  ");
         Serial.println(mqtt_topic_control.c_str());
+
+        //send wifiIP
+        MQTT_sendWifiIP();
     }
     else {
         Serial.println("connect fail");
@@ -234,6 +248,9 @@ void messageReceived(String &topic, String &payload) {
     }
     else if (topic == mqtt_topic_request) {
         handleEventResquest(payload.c_str());
+    }
+    else {
+        Serial.println("Message not available");
     }
 }
 
@@ -320,47 +337,36 @@ void setup() {
         //OTA
         OTA_update();
 
-        //if (isOnline == true) {
-            //RTC setup
+        if (WiFi.waitForConnectResult() == WL_CONNECTED) {
+            //Connect wifi and mqtt
+            connectMQTT();
+            delay(50);
+        }
         setupRTC();
 
-        //Connect wifi and mqtt
-        connectMQTT();
-        delay(500);
-        //Send config 
-        MQTT_sendRelayConfig();
-        //send wifiIP
-        MQTT_sendWifiIP();
-
-        /* }
-         else {*/
-         //local controler
         local_server.begin();
         local_server.setNoDelay(true);
         Serial.print("Ready! Use 'telnet ");
         Serial.print(WiFi.localIP());
         Serial.println(" 1234' to connect");
         //}
-
     }
-
-
 
     xTaskCreatePinnedToCore(
         Task1code,   /* Task function. */
         "Task1",     /* name of task. */
-        10000,       /* Stack size of task */
+        12000,       /* Stack size of task */
         NULL,        /* parameter of the task */
         1,           /* priority of the task */
         &Task1,      /* Task handle to keep track of created task */
         0);          /* pin task to core 0 */
-    delay(100);
+    delay(500);
 
     //create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
     xTaskCreatePinnedToCore(
         Task2code,   /* Task function. */
         "Task2",     /* name of task. */
-        10000,       /* Stack size of task */
+        12000,       /* Stack size of task */
         NULL,        /* parameter of the task */
         1,           /* priority of the task */
         &Task2,      /* Task handle to keep track of created task */
@@ -373,10 +379,12 @@ void Task1code(void * pvParameters) {
     static unsigned long previousMillis = 0;
     int counter = 0;
 
+
     for (;;) {
         if (WiFi.status() == WL_CONNECTED) {
             digitalWrite(pinWifi, HIGH);
 
+            server.handleClient();
             //checkOnline();
             //if (isOnline) {
 
@@ -390,11 +398,12 @@ void Task1code(void * pvParameters) {
                 Serial.println(timeNow);
             }
 
+            client.loop();
+            delay(10);  // <- fixes some issues with WiFi stability
             // mqtt
             if (!client.connected()) {
                 connectMQTT();
             }
-            client.loop();
 
         }
         else {
@@ -419,7 +428,6 @@ void Task2code(void * pvParameters) {
 
     for (;;) {
         //OTA
-        server.handleClient();
         localConnectionHandler();
 
         //readSensorSHT(5000);
@@ -592,18 +600,6 @@ void TimmerHandler()
             else if (timeNow >= timmer[i].timmerStart && timeNow <= timmer[i].timmerEnd) {      //Nếu là trong thời gian hẹn giờ
                 relay[relayid].listCondition[relayConditionNumber] = timmerInfluence;
             }
-            //TODO: DEBUG
-           /* Serial.print("timmer id ");
-            Serial.println(i);
-
-            Serial.print("relay id ");
-            Serial.println(relayid);
-
-            Serial.print("relay numCondition ");
-            Serial.println(relay[relayid].numCondition);
-
-            Serial.print("relay action ");
-            Serial.println(timmerInfluence);*/
         }
     }
 }
@@ -641,7 +637,7 @@ void analogHandler()
 void digitalHandler()
 {
     String fileTimmer;
-    String fileData = "";
+    char fileData[512];
     byte isSomethingChanged = 0;
 
     for (byte i = 8; i < 16; i++)
@@ -661,7 +657,7 @@ void digitalHandler()
             timmer[timmerID].timmerCycle = 0;
             timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
 
-            DynamicJsonBuffer jsonBuffer;
+            StaticJsonBuffer<500> jsonBuffer;
             JsonObject& root = jsonBuffer.createObject();
 
             root["relayID"] = timmerID;
@@ -671,18 +667,18 @@ void digitalHandler()
             root["tc"] = 0;
             root["ti"] = !timmer[timmerID].timmerInfluence;
 
-            root.printTo(fileData);
+            root.printTo(fileData, sizeof(fileData));
             fileTimmer = "/timmer";
             fileTimmer += (timmerID);
             fileTimmer += ".txt";
-            writeFile(SPIFFS, fileTimmer.c_str(), fileData.c_str());
+            writeFile(SPIFFS, fileTimmer.c_str(), fileData);
 
             delay(100);
         }
     }
 
     if (isSomethingChanged > 0) {
-        DynamicJsonBuffer jsonBuffer_2;
+        StaticJsonBuffer<500> jsonBuffer_2;
         JsonObject& root2 = jsonBuffer_2.createObject();
         JsonArray& status = root2.createNestedArray("status");
 
@@ -690,15 +686,19 @@ void digitalHandler()
             status.add(digitalInput[i].status);
         }
 
-        const char *fileName = "/inputs.txt";
-        root2.printTo(fileData);
-        writeFile(SPIFFS, fileName, fileData.c_str());
+        const char *fileNameInput = "/inputs.txt";
+        root2.printTo(fileData, sizeof(fileData));
+        writeFile(SPIFFS, fileNameInput, fileData);
     }
 }
 
 void handleEventResquest(const char * payload) {
-    StaticJsonBuffer<150> jsonBuffer;
+    StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(payload);
+    if (!root.success()) {
+        Serial.println("JSON parse failed");
+        return;
+    }
 
     String type = root[F("type")];
 
@@ -715,9 +715,7 @@ void handleEventResquest(const char * payload) {
 
 void handleEventControl(const char * payload)
 {
-    Serial.println(payload);
-
-    DynamicJsonBuffer jsonBuffer;
+    StaticJsonBuffer<500> jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(payload);
     if (!root.success()) {
         Serial.println("JSON parse failed");
@@ -739,9 +737,10 @@ void handleEventControl(const char * payload)
         delay(100);
         ESP.restart();
     }
-    else {
-        String fileName = "/timmer";
-        int id;
+    else if (root["type"] == "timmer") {
+        //Serial.println("timmer control");
+        String fileName;
+        byte id;
 
         //{"type":"timmer","id":1,"relayID":1,"rcn":1,"ts":"0","te":"0","ti":0}
         if (root["type"] == "timmer") {
@@ -769,7 +768,7 @@ void handleEventControl(const char * payload)
 
 /*
 
-{"type":"timmer","id": 0,"relayID":0,"rcn":1,"ts":0,"te":0,"tc":0,"ti":0}   
+{"type":"timmer","id": 0,"relayID":0,"rcn":1,"ts":0,"te":0,"tc":0,"ti":0}
 
 { "type": "timmer","id":0}
 { "type": "relays"}

@@ -51,14 +51,16 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {
     }
 }
 
-String readFileString(fs::FS &fs, const char * path) {
-    String str = "";
+int readFileString(fs::FS &fs, const char * path, String &str) {
+    //String str = "";
+    byte size = 0;
     File file = fs.open(path);
     while (file.available()) {
         char data = file.read();
         str += data;
+        size++;
     }
-    return str;
+    return size;
 }
 
 int readFile(fs::FS &fs, const char * path) {
@@ -76,7 +78,7 @@ int readFile(fs::FS &fs, const char * path) {
         fileData[counter] = data;
         counter++;
     }
-    return 1;
+    return counter;
 }
 
 void writeFile(fs::FS &fs, const char * path, const char * message) {
@@ -87,12 +89,11 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
         Serial.println("- failed to open file for writing");
         return;
     }
-    file.print(message);
     if (file.print(message)) {
         Serial.println("- file written");
     }
     else {
-        Serial.println("- frite failed");
+        Serial.println("- write failed");
     }
 }
 

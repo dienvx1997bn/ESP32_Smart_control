@@ -11,7 +11,7 @@ RTC_DS3231 rtc;
 static const char ntpServerName[] = "us.pool.ntp.org";
 const int timeZone = 7;
 WiFiUDP Udp;
-unsigned int localPort = 8888;  // local port to listen for UDP packets
+unsigned int localPort = 2390;  // local port to listen for UDP packets
 
 
 RTC_DS3231 getRTC() {
