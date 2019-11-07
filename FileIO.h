@@ -16,7 +16,7 @@ extern AnalogINPUT analogInput[MAX_ANALOG];
 extern DigitalInput digitalInput[MAX_DIGITAL];
 
 
-#define ESP_getChipId()   ((uint32_t)ESP.getEfuseMac())
+#define ESP_getChipId()   (String((uint16_t)(ESP.getEfuseMac()>>32)) + String((uint32_t)ESP.getEfuseMac()))
 
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels) {

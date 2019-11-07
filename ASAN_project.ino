@@ -56,10 +56,6 @@ WiFiClient local_serverClients[MAX_SRV_CLIENTS];
 #define BUFFER_SIZE 512
 byte buff[BUFFER_SIZE];
 
-/* Put your SSID & Password */
-String APssid = "ESP32";  // Enter SSID here
-const char* APpassword = "12345678";  //Enter Password here
-
 /* Put IP Address details */
 //IPAddress local_ip(192, 168, 1, 1);
 //IPAddress gateway(192, 168, 1, 1);
@@ -88,7 +84,7 @@ void OTA_update() {
     Serial.println(WiFi.localIP());
     delay(1);
     /*use mdns for host name resolution*/
-    if (!MDNS.begin(host.c_str())) {            //  http://esp193858948.local
+    if (!MDNS.begin(host.c_str())) {            //  http://esp3381529988.local
         Serial.println("Error setting up MDNS responder!");
     }
     else {
@@ -767,6 +763,7 @@ void handleEventControl(const char * payload)
 
 
 /*
+cmd/215883381529988
 
 {"type":"timmer","id": 0,"relayID":0,"rcn":1,"ts":0,"te":0,"tc":0,"ti":0}
 
