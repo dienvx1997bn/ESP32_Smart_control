@@ -431,8 +431,6 @@ void Task2code(void * pvParameters) {
         TimmerHandler();
 
         relayProcessing();
-        //Serial.print("free heap:  ");
-        //Serial.println(ESP.getFreeHeap());
     }
 }
 
@@ -473,7 +471,7 @@ void localConnectionHandler() {
                     while (local_serverClients[i].available()) {
                         char dataRecv = (char)local_serverClients[i].read();
                         dataTransfer[i] += dataRecv;
-                        //Serial.write(dataRecv);
+                        Serial.write(dataRecv);
                     }
                     if (dataTransfer[i] != "") {
                         //Serial.println("ok");
