@@ -8,7 +8,7 @@
 #include <Wire.h>
 #include "RTClib.h"
 
-
+#include <SHT1x.h>
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
@@ -75,6 +75,38 @@ MUX74HC4067 mux(33, 27, 2, 25, 26);
 Timmer timmer[MAX_TIMMER];
 AnalogINPUT analogInput[MAX_ANALOG];
 DigitalInput digitalInput[MAX_DIGITAL];
+// Specify data and clock connections and instantiate SHT1x object
+#define dataPin  21
+#define clockPin 22
+SHT1x sht1x(dataPin, clockPin);
+
+struct SHTSensor {
+    float temp_c;
+    float temp_f;
+    float humidity;
+}Sht10;
+
+void readSensorSHT(long timeCycle) { //second
+    static long previousSecond = 0;
+    
+    if (timeNow - previousSecond >= timeCycle) {
+        previousSecond = timeNow;
+        // Read values from the sensor
+        // Save old value
+
+        // Update current value
+        Sht10.temp_c = sht1x.readTemperatureC();
+        Sht10.humidity = sht1x.readHumidity();
+        //#ifdef DEBUG
+        Serial.print("temp:  ");
+        Serial.print(Sht10.temp_c);
+        Serial.print("\thum: ");
+        Serial.println(Sht10.humidity);
+        //#endif // DEBUG
+        //updateAnallog();
+    }
+}
+
 
 void OTA_update() {
     String host = "esp";
@@ -155,7 +187,7 @@ void MQTT_sendTimmerConfig(int index) {
 
 void MQTT_sendWifiIP() {
     Serial.println("send wifi config");
-    StaticJsonBuffer<500> jsonBuffer;
+    DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     if (!root.success()) {
         Serial.println("JSON parse failed");
@@ -173,7 +205,7 @@ void MQTT_sendWifiIP() {
 
 void MQTT_sendRelayConfig() {
     Serial.println("send relay config");
-    StaticJsonBuffer<500> jsonBuffer;
+    DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     if (!root.success()) {
         Serial.println("JSON parse failed");
@@ -251,10 +283,7 @@ void messageReceived(String &topic, String &payload) {
 }
 
 void setup_PinMode() {
-
-    pinMode(15, OUTPUT);
-    pinMode(13, OUTPUT);
-    pinMode(14, OUTPUT);
+    relayStatus.setAllLow();
 
     pinMode(pinWifi, OUTPUT);
 
@@ -324,7 +353,7 @@ void setup() {
     ////wifimanager here
     String host = "esp";
     host += String(ESP_getChipId());
-    wifiManager.setTimeout(90);
+    wifiManager.setTimeout(120);
 
 
     if (wifiManager.autoConnect(host.c_str())) {
@@ -380,7 +409,6 @@ void Task1code(void * pvParameters) {
         if (WiFi.status() == WL_CONNECTED) {
             digitalWrite(pinWifi, HIGH);
 
-            server.handleClient();
             //checkOnline();
             //if (isOnline) {
 
@@ -400,6 +428,7 @@ void Task1code(void * pvParameters) {
             if (!client.connected()) {
                 connectMQTT();
             }
+            Serial.println(ESP.getFreeHeap());
 
         }
         else {
@@ -423,11 +452,13 @@ void Task1code(void * pvParameters) {
 void Task2code(void * pvParameters) {
 
     for (;;) {
+        server.handleClient();
+
         //OTA
         localConnectionHandler();
 
-        //readSensorSHT(5000);
-        //digitalHandler();
+        readSensorSHT(10);
+        digitalHandler();
         TimmerHandler();
 
         relayProcessing();
@@ -651,7 +682,7 @@ void digitalHandler()
             timmer[timmerID].timmerCycle = 0;
             timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
 
-            StaticJsonBuffer<500> jsonBuffer;
+            DynamicJsonBuffer jsonBuffer;
             JsonObject& root = jsonBuffer.createObject();
 
             root["relayID"] = timmerID;
@@ -709,7 +740,7 @@ void handleEventResquest(const char * payload) {
 
 void handleEventControl(const char * payload)
 {
-    StaticJsonBuffer<500> jsonBuffer;
+    DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(payload);
     if (!root.success()) {
         Serial.println("JSON parse failed");
@@ -740,6 +771,9 @@ void handleEventControl(const char * payload)
         if (root["type"] == "timmer") {
             //Serial.print("Timmer action");
             id = root["id"];
+            if (id >= MAX_TIMMER) {
+                return;
+            }
             timmer[id].relayID = root["relayID"];
             timmer[id].relayConditionNumber = root["rcn"];
             timmer[id].timmerStart = root["ts"];
