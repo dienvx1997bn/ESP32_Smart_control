@@ -66,7 +66,7 @@ long timeNow;
 #define TIME_UPDATE 5000
 
 Relay relay[MAX_RELAY];
-ShiftRegister74HC595 relayStatus(2, 13, 14, 15);
+ShiftRegister74HC595 relayStatus(4, 13, 14, 15);
 // Creates a MUX74HC4067 instance
 // 1st argument is the Arduino PIN to which the EN pin connects
 // 2nd-5th arguments are the Arduino PINs to which the S0-S3 pins connect

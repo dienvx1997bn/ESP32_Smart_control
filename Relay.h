@@ -7,7 +7,7 @@
 #endif
 #include <ArduinoJson.h>
 
-#define MAX_RELAY 16
+#define MAX_RELAY 32
 #define MAX_CONDITION 3
 
 
