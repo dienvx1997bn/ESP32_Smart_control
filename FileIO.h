@@ -64,7 +64,7 @@ int readFileString(fs::FS &fs, const char * path, String &str) {
 }
 
 int readFile(fs::FS &fs, const char * path) {
-    Serial.printf("Reading file: %s\r\n", path);
+    //Serial.printf("Reading file: %s\r\n", path);
     counter = 0;
     File file = fs.open(path);
     if (!file || file.isDirectory()) {
@@ -90,7 +90,7 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
         return;
     }
     if (file.print(message)) {
-        Serial.println("- file written");
+        //Serial.println("- file written");
     }
     else {
         Serial.println("- write failed");
@@ -144,11 +144,13 @@ void readDigitalInput(fs::FS &fs) {
     DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(fileData);
     if (!root.success()) {
-        Serial.println("relay Not success!");
+        Serial.println("intput Not success!");
         return;
     }
     for (byte i = 0; i < MAX_DIGITAL; i++) {
         digitalInput[i].old_status = root["status"][i];
+        digitalInput[i].isActive = root["active"][i];
+
         //digitalInput[i].status = digitalInput[i].old_status;
     }
 
@@ -156,6 +158,7 @@ void readDigitalInput(fs::FS &fs) {
 
 
 int readRelayConfig(fs::FS &fs) {
+    Serial.println("readRelayConfig");
     String relayFileName = "/relay";
     for (byte i = 0; i < MAX_RELAY; i++) {
         relayFileName = "/relay";

@@ -4,9 +4,8 @@
 
 #define MAX_TIMMER 32
 
-class Timmer
+struct Timmer
 {
-public:
     int relayID = -1;   
     int relayConditionNumber;  // Điều kiện thứ i của relay.listCondigion
     long timmerCycle;    // chu trình vòng lặp 
@@ -14,21 +13,6 @@ public:
     long timmerEnd = 0;;    // Thời gian kết thúc
     int timmerInfluence = RELAY_OFF;   // Tác động lên relay
 
-    Timmer();
-    ~Timmer();
-
-
-
-private:
-
 };
-
-Timmer::Timmer()
-{
-}
-
-Timmer::~Timmer()
-{
-}
 
 

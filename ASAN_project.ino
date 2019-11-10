@@ -28,7 +28,6 @@
 #include "AnalogINPUT.h"
 #include "DigitalInput.h"
 #include "Timmer.h"
-#include "Sensor.h"
 
 // Mutil task
 TaskHandle_t Task1;
@@ -88,7 +87,7 @@ struct SHTSensor {
 
 void readSensorSHT(long timeCycle) { //second
     static long previousSecond = 0;
-    
+
     if (timeNow - previousSecond >= timeCycle) {
         previousSecond = timeNow;
         // Read values from the sensor
@@ -357,7 +356,7 @@ void setup() {
 
 
     if (wifiManager.autoConnect(host.c_str())) {
-        WiFi.softAPdisconnect(true);
+        //WiFi.softAPdisconnect(true);
 
         //OTA
         OTA_update();
@@ -428,8 +427,7 @@ void Task1code(void * pvParameters) {
             if (!client.connected()) {
                 connectMQTT();
             }
-            Serial.println(ESP.getFreeHeap());
-
+            //Serial.println(ESP.getFreeHeap());
         }
         else {
             digitalWrite(pinWifi, LOW);
@@ -457,8 +455,8 @@ void Task2code(void * pvParameters) {
         //OTA
         localConnectionHandler();
 
-        readSensorSHT(10);
-        digitalHandler();
+        //readSensorSHT(10);
+        //digitalHandler();
         TimmerHandler();
 
         relayProcessing();
@@ -659,6 +657,24 @@ void analogHandler()
 
 }
 
+void writeFileInputs() {
+    DynamicJsonBuffer jsonBuffer_2;
+    JsonObject& root2 = jsonBuffer_2.createObject();
+    JsonArray& status = root2.createNestedArray("status");
+    JsonArray& active = root2.createNestedArray("active");
+
+    for (byte i = 8; i < 16; ++i) {
+        status.add(digitalInput[i].status);
+    }
+    for (byte i = 8; i < 16; ++i) {
+        status.add(digitalInput[i].isActive);
+    }
+
+    const char *fileNameInput = "/inputs.txt";
+    root2.printTo(fileData, sizeof(fileData));
+    writeFile(SPIFFS, fileNameInput, fileData);
+}
+
 void digitalHandler()
 {
     String fileTimmer;
@@ -667,53 +683,49 @@ void digitalHandler()
 
     for (byte i = 8; i < 16; i++)
     {
+        if (digitalInput[i].isActive == 1) {
 
-        digitalInput[i].status = mux.read(i);
+            digitalInput[i].status = mux.read(i);       //đọc nút nhấn
 
-        if (digitalInput[i].status != digitalInput[i].old_status) {
-            digitalInput[i].old_status = digitalInput[i].status;
-            isSomethingChanged++;
-            byte timmerID = i - 8;
+            if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu có sự thay đổi
+                delay(100); //delay 100
+                digitalInput[i].status = mux.read(i);       //đọc lại để kiểm tra
+                if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu vẫn là có sự thay đổi
+                    
+                    isSomethingChanged++;
+                    byte timmerID = i - 8;
 
-            timmer[timmerID].relayID = timmerID;
-            timmer[timmerID].relayConditionNumber = 1;
-            timmer[timmerID].timmerStart = 0;
-            timmer[timmerID].timmerEnd = 0;
-            timmer[timmerID].timmerCycle = 0;
-            timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
+                    timmer[timmerID].relayID = timmerID;
+                    timmer[timmerID].relayConditionNumber = 1;
+                    timmer[timmerID].timmerStart = 0;
+                    timmer[timmerID].timmerEnd = 0;
+                    timmer[timmerID].timmerCycle = 0;
+                    timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
 
-            DynamicJsonBuffer jsonBuffer;
-            JsonObject& root = jsonBuffer.createObject();
+                    DynamicJsonBuffer jsonBuffer;
+                    JsonObject& root = jsonBuffer.createObject();
+                    root["relayID"] = timmerID;
+                    root["rcn"] = 1;
+                    root["ts"] = 0;
+                    root["te"] = 0;
+                    root["tc"] = 0;
+                    root["ti"] = !timmer[timmerID].timmerInfluence;
+                    root.printTo(fileData, sizeof(fileData));
+                    fileTimmer = "/timmer";
+                    fileTimmer += (timmerID);
+                    fileTimmer += ".txt";
+                    writeFile(SPIFFS, fileTimmer.c_str(), fileData);
 
-            root["relayID"] = timmerID;
-            root["rcn"] = 1;
-            root["ts"] = 0;
-            root["te"] = 0;
-            root["tc"] = 0;
-            root["ti"] = !timmer[timmerID].timmerInfluence;
 
-            root.printTo(fileData, sizeof(fileData));
-            fileTimmer = "/timmer";
-            fileTimmer += (timmerID);
-            fileTimmer += ".txt";
-            writeFile(SPIFFS, fileTimmer.c_str(), fileData);
+                }
 
-            delay(100);
+            }
         }
+
     }
 
     if (isSomethingChanged > 0) {
-        StaticJsonBuffer<500> jsonBuffer_2;
-        JsonObject& root2 = jsonBuffer_2.createObject();
-        JsonArray& status = root2.createNestedArray("status");
-
-        for (byte i = 8; i < 16; ++i) {
-            status.add(digitalInput[i].status);
-        }
-
-        const char *fileNameInput = "/inputs.txt";
-        root2.printTo(fileData, sizeof(fileData));
-        writeFile(SPIFFS, fileNameInput, fileData);
+        writeFileInputs();
     }
 }
 
@@ -762,6 +774,14 @@ void handleEventControl(const char * payload)
         delay(100);
         ESP.restart();
     }
+    else if (root["type"] == "digital") {
+        int index = root["id"];
+        int isActive = root["active"];
+
+        digitalInput[index].isActive = isActive;
+
+        writeFileInputs();
+    }
     else if (root["type"] == "timmer") {
         //Serial.println("timmer control");
         String fileName;
@@ -802,5 +822,6 @@ cmd/215883381529988
 { "type": "timmer","id":0}
 { "type": "relays"}
 { "type": "wifi"}
+{ "type": reset}
 
 */
