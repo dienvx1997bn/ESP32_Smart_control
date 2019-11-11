@@ -456,7 +456,7 @@ void Task2code(void * pvParameters) {
         localConnectionHandler();
 
         //readSensorSHT(10);
-        //digitalHandler();
+        digitalHandler(50);
         TimmerHandler();
 
         relayProcessing();
@@ -675,57 +675,58 @@ void writeFileInputs() {
     writeFile(SPIFFS, fileNameInput, fileData);
 }
 
-void digitalHandler()
+void digitalHandler(long timeCycle)
 {
+    static unsigned long preReadDigital;
     String fileTimmer;
     char fileData[512];
     byte isSomethingChanged = 0;
 
-    for (byte i = 8; i < 16; i++)
-    {
-        if (digitalInput[i].isActive == 1) {
+    if (millis() - preReadDigital > timeCycle) {
+        preReadDigital = millis();
+        for (byte i = 8; i < 16; i++)
+        {
+            //if (digitalInput[i].isActive == 1) {
 
-            digitalInput[i].status = mux.read(i);       //đọc nút nhấn
+                digitalInput[i].status = mux.read(i);       //đọc nút nhấn
 
-            if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu có sự thay đổi
-                delay(100); //delay 100
-                digitalInput[i].status = mux.read(i);       //đọc lại để kiểm tra
-                if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu vẫn là có sự thay đổi
-                    
-                    isSomethingChanged++;
-                    byte timmerID = i - 8;
+                if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu có sự thay đổi
+                    delay(80); //delay 80
+                    digitalInput[i].status = mux.read(i);       //đọc lại để kiểm tra
+                    if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu vẫn là có sự thay đổi
+                        digitalInput[i].old_status = digitalInput[i].status;
+                        isSomethingChanged++;
+                        byte timmerID = i - 8;
 
-                    timmer[timmerID].relayID = timmerID;
-                    timmer[timmerID].relayConditionNumber = 1;
-                    timmer[timmerID].timmerStart = 0;
-                    timmer[timmerID].timmerEnd = 0;
-                    timmer[timmerID].timmerCycle = 0;
-                    timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
+                        timmer[timmerID].relayID = timmerID;
+                        timmer[timmerID].relayConditionNumber = 1;
+                        timmer[timmerID].timmerStart = 0;
+                        timmer[timmerID].timmerEnd = 0;
+                        timmer[timmerID].timmerCycle = 0;
+                        timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
 
-                    DynamicJsonBuffer jsonBuffer;
-                    JsonObject& root = jsonBuffer.createObject();
-                    root["relayID"] = timmerID;
-                    root["rcn"] = 1;
-                    root["ts"] = 0;
-                    root["te"] = 0;
-                    root["tc"] = 0;
-                    root["ti"] = !timmer[timmerID].timmerInfluence;
-                    root.printTo(fileData, sizeof(fileData));
-                    fileTimmer = "/timmer";
-                    fileTimmer += (timmerID);
-                    fileTimmer += ".txt";
-                    writeFile(SPIFFS, fileTimmer.c_str(), fileData);
-
-
+                        DynamicJsonBuffer jsonBuffer;
+                        JsonObject& root = jsonBuffer.createObject();
+                        root["relayID"] = timmerID;
+                        root["rcn"] = 1;
+                        root["ts"] = 0;
+                        root["te"] = 0;
+                        root["tc"] = 0;
+                        root["ti"] = !timmer[timmerID].timmerInfluence;
+                        root.printTo(fileData, sizeof(fileData));
+                        fileTimmer = "/timmer";
+                        fileTimmer += (timmerID);
+                        fileTimmer += ".txt";
+                        writeFile(SPIFFS, fileTimmer.c_str(), fileData);
+                    }
                 }
+            //}
 
-            }
         }
 
-    }
-
-    if (isSomethingChanged > 0) {
-        writeFileInputs();
+        if (isSomethingChanged > 0) {
+            writeFileInputs();
+        }
     }
 }
 
