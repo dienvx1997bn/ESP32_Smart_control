@@ -121,6 +121,7 @@ void OTA_update() {
     else {
         host += ".local";
         Serial.println("mDNS responder started:  " + host);
+        //MDNS.addService("http", "tcp", 80);
     }
 
     /*return index page which is stored in serverIndex */
@@ -282,9 +283,7 @@ void messageReceived(String &topic, String &payload) {
 }
 
 void setup_PinMode() {
-    relayStatus.setAllLow();
-
-    pinMode(pinWifi, OUTPUT);
+    
 
     //relayStatus.setAllHigh();
 
@@ -322,6 +321,10 @@ void checkOnline() {
 }
 
 void setup() {
+    pinMode(pinWifi, OUTPUT);
+    digitalWrite(pinWifi, HIGH);
+    //relayStatus.setAllHigh();
+
     Serial.begin(115200);
     delay(100);
 
@@ -341,8 +344,8 @@ void setup() {
     delay(10);*/
     readTimmerConfig(SPIFFS);
     delay(10);
-    readDigitalInput(SPIFFS);
-    delay(10);
+    /*readDigitalInput(SPIFFS);
+    delay(10);*/
 
     setup_PinMode();
 
@@ -386,16 +389,18 @@ void setup() {
         0);          /* pin task to core 0 */
     delay(500);
 
-    //create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
-    xTaskCreatePinnedToCore(
-        Task2code,   /* Task function. */
-        "Task2",     /* name of task. */
-        12000,       /* Stack size of task */
-        NULL,        /* parameter of the task */
-        1,           /* priority of the task */
-        &Task2,      /* Task handle to keep track of created task */
-        1);          /* pin task to core 1 */
-    delay(100);
+    ////create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
+    //xTaskCreatePinnedToCore(
+    //    Task2code,   /* Task function. */
+    //    "Task2",     /* name of task. */
+    //    12000,       /* Stack size of task */
+    //    NULL,        /* parameter of the task */
+    //    1,           /* priority of the task */
+    //    &Task2,      /* Task handle to keep track of created task */
+    //    1);          /* pin task to core 1 */
+    //delay(100);
+    digitalWrite(pinWifi, LOW);
+
 }
 
 //Task1code:   giao tiếp mqtt, update RTC
@@ -406,7 +411,7 @@ void Task1code(void * pvParameters) {
 
     for (;;) {
         if (WiFi.status() == WL_CONNECTED) {
-            digitalWrite(pinWifi, HIGH);
+            //digitalWrite(pinWifi, HIGH);
 
             //checkOnline();
             //if (isOnline) {
@@ -430,7 +435,7 @@ void Task1code(void * pvParameters) {
             //Serial.println(ESP.getFreeHeap());
         }
         else {
-            digitalWrite(pinWifi, LOW);
+            //digitalWrite(pinWifi, LOW);
 
             /*if (!client.connected() && (millis() - previousMillisConnect > 60000)) {
                 wifiManager.autoConnect(host.c_str());
@@ -446,26 +451,20 @@ void Task1code(void * pvParameters) {
     }
 }
 
+
 //Task2code:  xử lý điều khiển
-void Task2code(void * pvParameters) {
-
-    for (;;) {
-        server.handleClient();
-
-        //OTA
-        localConnectionHandler();
-
-        //readSensorSHT(10);
-        digitalHandler(50);
-        TimmerHandler();
-
-        relayProcessing();
-    }
-}
-
 void loop() {
 
-    // Not nedded, Do nothing here
+    server.handleClient();
+
+    //OTA
+    localConnectionHandler();
+
+    //readSensorSHT(10);
+    //digitalHandler(100);
+    TimmerHandler();
+
+    relayProcessing();
 }
 
 void localConnectionHandler() {
@@ -503,7 +502,7 @@ void localConnectionHandler() {
                         Serial.write(dataRecv);
                     }
                     if (dataTransfer[i] != "") {
-                        //Serial.println("ok");
+                        Serial.println("local controler");
                         handleEventControl(dataTransfer[i].c_str());
                         delay(10);
                     }
@@ -612,8 +611,8 @@ void TimmerHandler()
             if (timmer[i].timmerStart == 0 && timmer[i].timmerEnd == 0) { // Nếu là bật hoặc tắt 
                 relay[relayid].listCondition[relayConditionNumber] = timmerInfluence;
             }
-            else if (timeNow < timmer[i].timmerStart) { // Nếu chưa đến thời gian hẹn giờ hoặc hết giờ thì đảo ngược trạng thái cài đặt
-                relay[relayid].listCondition[relayConditionNumber] = !timmerInfluence;
+            else if (timeNow < timmer[i].timmerStart) { // Nếu chưa đến thời gian hẹn giờ thì giữ nguyên trạng thái cũ
+                //relay[relayid].listCondition[relayConditionNumber] = !timmerInfluence;
             }
             else if (timeNow > timmer[i].timmerEnd) { // Nếu quá thời gian hẹn giờ thì đảo ngược trạng thái cài đặt, cộng thêm chu kỳ chuẩn bị cho tiếp theo
                 relay[relayid].listCondition[relayConditionNumber] = !timmerInfluence;
@@ -657,7 +656,7 @@ void analogHandler()
 
 }
 
-void writeFileInputs() {
+void updateFileInputs() {
     DynamicJsonBuffer jsonBuffer_2;
     JsonObject& root2 = jsonBuffer_2.createObject();
     JsonArray& status = root2.createNestedArray("status");
@@ -686,46 +685,57 @@ void digitalHandler(long timeCycle)
         preReadDigital = millis();
         for (byte i = 8; i < 16; i++)
         {
+            delay(10);
             //if (digitalInput[i].isActive == 1) {
+            digitalInput[i].status = mux.read(i);       //đọc nút nhấn
 
-                digitalInput[i].status = mux.read(i);       //đọc nút nhấn
+            if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu có sự thay đổi
 
-                if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu có sự thay đổi
-                    delay(80); //delay 80
-                    digitalInput[i].status = mux.read(i);       //đọc lại để kiểm tra
-                    if (digitalInput[i].status != digitalInput[i].old_status) { //Nếu vẫn là có sự thay đổi
-                        digitalInput[i].old_status = digitalInput[i].status;
-                        isSomethingChanged++;
-                        byte timmerID = i - 8;
+                digitalInput[i].isActive = digitalInput[i].isActive >= 5 ? 5 : digitalInput[i].isActive + 1;
+                delay(10);
 
-                        timmer[timmerID].relayID = timmerID;
-                        timmer[timmerID].relayConditionNumber = 1;
-                        timmer[timmerID].timmerStart = 0;
-                        timmer[timmerID].timmerEnd = 0;
-                        timmer[timmerID].timmerCycle = 0;
-                        timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
+                if (digitalInput[i].isActive >= 5) { 
 
-                        DynamicJsonBuffer jsonBuffer;
-                        JsonObject& root = jsonBuffer.createObject();
-                        root["relayID"] = timmerID;
-                        root["rcn"] = 1;
-                        root["ts"] = 0;
-                        root["te"] = 0;
-                        root["tc"] = 0;
-                        root["ti"] = !timmer[timmerID].timmerInfluence;
-                        root.printTo(fileData, sizeof(fileData));
-                        fileTimmer = "/timmer";
-                        fileTimmer += (timmerID);
-                        fileTimmer += ".txt";
-                        writeFile(SPIFFS, fileTimmer.c_str(), fileData);
-                    }
+                    Serial.print("digital change: ");
+                    Serial.println(i);
+
+                    digitalInput[i].old_status = digitalInput[i].status;
+                    isSomethingChanged++;
+                    byte timmerID = i - 8;
+
+                    timmer[timmerID].relayID = timmerID;
+                    timmer[timmerID].relayConditionNumber = 1;
+                    timmer[timmerID].timmerStart = 0;
+                    timmer[timmerID].timmerEnd = 0;
+                    timmer[timmerID].timmerCycle = 0;
+                    timmer[timmerID].timmerInfluence = !timmer[timmerID].timmerInfluence;
+
+                    DynamicJsonBuffer jsonBuffer;
+                    JsonObject& root = jsonBuffer.createObject();
+                    root["relayID"] = timmerID;
+                    root["rcn"] = 1;
+                    root["ts"] = 0;
+                    root["te"] = 0;
+                    root["tc"] = 0;
+                    root["ti"] = !timmer[timmerID].timmerInfluence;
+                    root.printTo(fileData, sizeof(fileData));
+                    fileTimmer = "/timmer";
+                    fileTimmer += (timmerID);
+                    fileTimmer += ".txt";
+                    writeFile(SPIFFS, fileTimmer.c_str(), fileData);
                 }
+            }
+            else
+            {
+                digitalInput[i].isActive = 0;
+            }
+            
             //}
 
         }
 
         if (isSomethingChanged > 0) {
-            writeFileInputs();
+            updateFileInputs();
         }
     }
 }
@@ -781,7 +791,7 @@ void handleEventControl(const char * payload)
 
         digitalInput[index].isActive = isActive;
 
-        writeFileInputs();
+        updateFileInputs();
     }
     else if (root["type"] == "timmer") {
         //Serial.println("timmer control");

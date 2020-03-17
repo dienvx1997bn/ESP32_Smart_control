@@ -95,6 +95,7 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
     else {
         Serial.println("- write failed");
     }
+    delay(10);
 }
 
 void deleteFile(fs::FS &fs, const char * path) {

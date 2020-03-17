@@ -8,7 +8,7 @@
 
 struct DigitalInput
 {
-    int isActive;
+    int isActive = 0;
     int status;     // Giá trị đo
     int old_status = 0;     // Giá trị đo
 };
